@@ -1,0 +1,27 @@
+[package]
+name = "book2pdf"
+version = "0.1.0"
+edition = "2021"
+description = "CLI utility to turn published documentation websites into PDFs"
+authors = ["0xheartcode <0xheartcode@gmail.com>"]
+license = "MIT"
+
+[dependencies]
+chromiumoxide = "0.7"
+lopdf = "0.32"
+scraper = "0.20"
+clap = { version = "4.5", features = ["derive"] }
+tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+colored = "2.1"
+slug = "0.1"
+anyhow = "1.0"
+url = "2.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+futures-util = "0.3"
+
+[[bin]]
+name = "book2pdf"
+path = "src/main.rs"

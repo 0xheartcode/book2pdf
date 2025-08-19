@@ -1,0 +1,28 @@
+# Rust/Cargo
+target/
+Cargo.lock
+
+# Output directory
+output_book2pdf/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
+*.pdf
+
+TODO.md
