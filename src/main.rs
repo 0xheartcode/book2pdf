@@ -2,15 +2,13 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
 use book2pdf::{Downloader, PdfMerger};
-use std::path::PathBuf;
 use std::process;
-use tracing::{error, info};
+use tracing::error;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-use tokio::fs;
 
 #[derive(Parser)]
 #[command(name = "book2pdf")]
-#[command(about = "CLI utility to turn a published GitBook website into a collection of PDFs for offline reading")]
+#[command(about = "CLI utility to turn published documentation into PDFs for offline reading")]
 #[command(version = "0.1.0")]
 struct Args {
     #[command(subcommand)]
@@ -60,57 +58,6 @@ fn parse_timeout(s: &str) -> Result<f64, String> {
     Ok(value)
 }
 
-async fn merge_pdfs(input_dir: &str, output_file: &str) -> Result<()> {
-    let input_path = PathBuf::from(input_dir);
-    
-    if !input_path.exists() {
-        return Err(anyhow::anyhow!("Input directory '{}' does not exist", input_dir));
-    }
-
-    info!("Scanning directory: {}", input_dir.green());
-    
-    let mut entries = fs::read_dir(&input_path).await?;
-    let mut pdf_files = Vec::new();
-    
-    while let Some(entry) = entries.next_entry().await? {
-        let path = entry.path();
-        if let Some(extension) = path.extension() {
-            if extension == "pdf" {
-                pdf_files.push(path);
-            }
-        }
-    }
-    
-    if pdf_files.is_empty() {
-        return Err(anyhow::anyhow!("No PDF files found in '{}'", input_dir));
-    }
-    
-    // Sort by filename to maintain order (especially numbered files)
-    pdf_files.sort();
-    
-    info!("Found {} PDF files to merge:", pdf_files.len());
-    for (i, path) in pdf_files.iter().enumerate() {
-        info!("  {}: {}", i + 1, path.file_name().unwrap().to_string_lossy().blue());
-    }
-    
-    let mut merger = PdfMerger::new();
-    
-    for pdf_path in &pdf_files {
-        info!("Adding: {}", pdf_path.display());
-        if let Err(e) = merger.add_pdf(pdf_path).await {
-            error!("Failed to add PDF {}: {}", pdf_path.display(), e);
-        }
-    }
-    
-    let output_path = PathBuf::from(output_file);
-    merger.save(&output_path).await?;
-    
-    info!("Successfully merged {} PDFs into: {}", 
-          pdf_files.len(), 
-          output_path.display().to_string().green());
-    
-    Ok(())
-}
 
 #[tokio::main]
 async fn main() {
@@ -134,7 +81,7 @@ async fn main() {
             downloader.run(&url).await
         }
         Commands::Merge { input_dir, output_file } => {
-            merge_pdfs(&input_dir, &output_file).await
+            PdfMerger::merge_directory(&input_dir, &output_file).await
         }
     };
 

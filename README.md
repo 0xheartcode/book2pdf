@@ -40,7 +40,7 @@ cargo run -- download "https://claritychallenge.org/clarity_CEC1_doc/docs/intro"
 
 ### Main Command
 
-CLI utility to turn a published GitBook website into a collection of PDFs for offline reading
+CLI utility to turn published documentation into PDFs for offline reading
 ```
 Usage: book2pdf <COMMAND>
 

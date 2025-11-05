@@ -2,9 +2,12 @@
 name = "book2pdf"
 version = "0.1.0"
 edition = "2021"
-description = "CLI utility to turn published documentation websites into PDFs"
+description = "CLI utility to turn published code documentation into PDFs"
 authors = ["0xheartcode <0xheartcode@gmail.com>"]
 license = "MIT"
+repository = "https://github.com/0xheartcode/book2pdf"
+keywords = ["scraper", "pdf", "web", "documentation", "gitbook"]
+categories = ["command-line-utilities", "multimedia", "text-processing"]
 
 [dependencies]
 chromiumoxide = "0.7"
