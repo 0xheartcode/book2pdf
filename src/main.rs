@@ -53,6 +53,10 @@ enum Commands {
         /// Limit the number of pages to download
         #[arg(long = "pages", value_parser = parse_pages)]
         pages: Option<usize>,
+
+        /// Show browser window (headless by default)
+        #[arg(long = "show-browser")]
+        show_browser: bool,
     },
     /// Merge existing PDF files into a single document
     Merge {
@@ -111,10 +115,10 @@ async fn main() {
         .init();
 
     let result = match args.command {
-        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout, pages } => {
+        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout, pages, show_browser } => {
             let combine = !no_combine; // Invert the logic: combine by default
             let downloader = Downloader::new(out_dir, combine, preserve_pages, timeout);
-            downloader.run(&url, pages).await
+            downloader.run(&url, pages, show_browser).await
         }
         Commands::Merge { input_dir, output_file } => {
             PdfMerger::merge_directory(&input_dir, &output_file).await

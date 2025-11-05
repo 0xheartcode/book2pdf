@@ -54,11 +54,16 @@ impl Downloader {
         }
     }
 
-    pub async fn run(&self, target_url: &str, pages_limit: Option<usize>) -> Result<()> {
+    pub async fn run(&self, target_url: &str, pages_limit: Option<usize>, show_browser: bool) -> Result<()> {
         info!("Visiting \"{}\"", target_url.green());
 
-        let config = BrowserConfig::builder()
-            .with_head()
+        let mut config_builder = BrowserConfig::builder();
+        
+        if show_browser {
+            config_builder = config_builder.with_head();
+        }
+        
+        let config = config_builder
             .window_size(1920, 1080)  // Larger viewport for better rendering
             .build()
             .map_err(|e| anyhow!("Failed to create browser config: {}", e))?;
@@ -82,7 +87,7 @@ impl Downloader {
             }
         });
 
-        let result = self.run_internal(&browser, target_url, pages_limit).await;
+        let result = self.run_internal(&browser, target_url, pages_limit, show_browser).await;
 
         browser.close().await.ok();
         handle.abort();
@@ -90,7 +95,7 @@ impl Downloader {
         result
     }
 
-    async fn run_internal(&self, browser: &Browser, target_url: &str, pages_limit: Option<usize>) -> Result<()> {
+    async fn run_internal(&self, browser: &Browser, target_url: &str, pages_limit: Option<usize>, _show_browser: bool) -> Result<()> {
         let page = browser
             .new_page("about:blank")
             .await
