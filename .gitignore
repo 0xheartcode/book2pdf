@@ -1,6 +1,7 @@
 # Rust/Cargo
 target/
 Cargo.lock
+book2pdf.toml
 
 # Output directory
 output_book2pdf/

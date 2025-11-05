@@ -12,7 +12,7 @@ use tokio::fs;
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-use crate::PdfMerger;
+use crate::{PdfMerger, config::PdfConfig};
 
 #[derive(Debug, Clone)]
 pub struct PdfOptions {
@@ -52,6 +52,17 @@ impl Downloader {
             _timeout: Duration::from_secs_f64(timeout_seconds),
             pdf_options: PdfOptions::default(),
         }
+    }
+
+    pub fn with_pdf_config(mut self, pdf_config: &PdfConfig) -> Self {
+        self.pdf_options = PdfOptions {
+            scale: pdf_config.scale,
+            margin_top: pdf_config.margin_top,
+            margin_right: pdf_config.margin_right,
+            margin_bottom: pdf_config.margin_bottom,
+            margin_left: pdf_config.margin_left,
+        };
+        self
     }
 
     pub async fn run(&self, target_url: &str, pages_limit: Option<usize>, show_browser: bool) -> Result<()> {

@@ -1,7 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
-use book2pdf::{Downloader, PdfMerger};
+use book2pdf::{Downloader, PdfMerger, Config};
+use std::path::PathBuf;
 use std::process;
 use tracing::error;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -23,6 +24,10 @@ struct Args {
     #[arg(short = 'q', long = "quiet", global = true, conflicts_with_all = ["verbose", "debug"])]
     quiet: bool,
 
+    /// Path to configuration file
+    #[arg(short = 'c', long = "config", global = true)]
+    config: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -35,8 +40,8 @@ enum Commands {
         url: String,
 
         /// Output directory used to save files
-        #[arg(short = 'o', long = "outDir", default_value = "output_book2pdf")]
-        out_dir: String,
+        #[arg(short = 'o', long = "outDir")]
+        out_dir: Option<String>,
 
         /// Don't combine PDFs into a single file (by default PDFs are combined)
         #[arg(long = "no-combine")]
@@ -47,8 +52,8 @@ enum Commands {
         preserve_pages: bool,
 
         /// Request timeout in seconds
-        #[arg(short = 't', long = "timeout", default_value = "30.0", value_parser = parse_timeout)]
-        timeout: f64,
+        #[arg(short = 't', long = "timeout", value_parser = parse_timeout)]
+        timeout: Option<f64>,
 
         /// Limit the number of pages to download
         #[arg(long = "pages", value_parser = parse_pages)]
@@ -91,7 +96,16 @@ fn parse_pages(s: &str) -> Result<usize, String> {
 async fn main() {
     let args = Args::parse();
 
-    // Determine log level based on verbosity flags
+    // Load configuration
+    let config = match Config::load(args.config.as_deref()) {
+        Ok(config) => config,
+        Err(e) => {
+            eprintln!("Failed to load config: {}", e);
+            process::exit(1);
+        }
+    };
+
+    // Determine log level based on CLI flags (override config)
     let (book2pdf_level, global_level) = if args.debug {
         ("trace", "warn")
     } else if args.verbose {
@@ -99,7 +113,13 @@ async fn main() {
     } else if args.quiet {
         ("error", "error")
     } else {
-        ("info", "warn")
+        // Use config file value as default
+        match config.logging.level.as_str() {
+            "trace" => ("trace", "warn"),
+            "debug" => ("debug", "warn"),
+            "error" => ("error", "error"),
+            _ => ("info", "warn"),
+        }
     };
 
     // Set up logging with chromiumoxide errors suppressed
@@ -116,9 +136,22 @@ async fn main() {
 
     let result = match args.command {
         Commands::Download { url, out_dir, no_combine, preserve_pages, timeout, pages, show_browser } => {
-            let combine = !no_combine; // Invert the logic: combine by default
-            let downloader = Downloader::new(out_dir, combine, preserve_pages, timeout);
-            downloader.run(&url, pages, show_browser).await
+            // Use CLI args or fallback to config values
+            let output_dir = out_dir.unwrap_or(config.output.folder.clone());
+            let combine = if no_combine { false } else { config.output.combine_pdfs };
+            let preserve = if preserve_pages { true } else { config.output.preserve_pages };
+            let timeout_val = timeout.unwrap_or(config.browser.timeout);
+            let show_window = if show_browser { true } else { config.browser.show_window };
+            
+            // Debug logging to verify values
+            tracing::debug!("Using output_dir: {}", output_dir);
+            tracing::debug!("Using timeout: {}", timeout_val);
+            tracing::debug!("Using combine: {}", combine);
+            tracing::debug!("Using show_window: {}", show_window);
+            
+            let downloader = Downloader::new(output_dir, combine, preserve, timeout_val)
+                .with_pdf_config(&config.pdf);
+            downloader.run(&url, pages.or(config.scraping.page_limit), show_window).await
         }
         Commands::Merge { input_dir, output_file } => {
             PdfMerger::merge_directory(&input_dir, &output_file).await
