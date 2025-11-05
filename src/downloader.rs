@@ -54,7 +54,7 @@ impl Downloader {
         }
     }
 
-    pub async fn run(&self, target_url: &str) -> Result<()> {
+    pub async fn run(&self, target_url: &str, pages_limit: Option<usize>) -> Result<()> {
         info!("Visiting \"{}\"", target_url.green());
 
         let config = BrowserConfig::builder()
@@ -82,7 +82,7 @@ impl Downloader {
             }
         });
 
-        let result = self.run_internal(&browser, target_url).await;
+        let result = self.run_internal(&browser, target_url, pages_limit).await;
 
         browser.close().await.ok();
         handle.abort();
@@ -90,7 +90,7 @@ impl Downloader {
         result
     }
 
-    async fn run_internal(&self, browser: &Browser, target_url: &str) -> Result<()> {
+    async fn run_internal(&self, browser: &Browser, target_url: &str, pages_limit: Option<usize>) -> Result<()> {
         let page = browser
             .new_page("about:blank")
             .await
@@ -147,8 +147,16 @@ impl Downloader {
             return Err(anyhow!("Not a supported documentation website (GitBook or Docusaurus)"));
         }
 
-        let links = self.collect_links(&document);
+        let mut links = self.collect_links(&document);
         debug!("Links collected: {:?}", links);
+
+        // Apply page limit if specified
+        if let Some(limit) = pages_limit {
+            if links.len() > limit {
+                info!("Limited to {} pages (found {} total)", limit, links.len());
+                links.truncate(limit);
+            }
+        }
 
         // Create output directory structure
         let pages_dir = PathBuf::from(&self.out_dir).join("pages");

@@ -11,6 +11,18 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 #[command(about = "CLI utility to turn published documentation into PDFs for offline reading")]
 #[command(version = "0.1.0")]
 struct Args {
+    /// Enable verbose output (debug level)
+    #[arg(short = 'v', long = "verbose", global = true, conflicts_with_all = ["debug", "quiet"])]
+    verbose: bool,
+
+    /// Enable debug output (trace level)
+    #[arg(short = 'd', long = "debug", global = true, conflicts_with_all = ["verbose", "quiet"])]
+    debug: bool,
+
+    /// Enable quiet mode (errors only)
+    #[arg(short = 'q', long = "quiet", global = true, conflicts_with_all = ["verbose", "debug"])]
+    quiet: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -23,7 +35,7 @@ enum Commands {
         url: String,
 
         /// Output directory used to save files
-#[arg(short = 'o', long = "outDir", default_value = "output_book2pdf")]
+        #[arg(short = 'o', long = "outDir", default_value = "output_book2pdf")]
         out_dir: String,
 
         /// Don't combine PDFs into a single file (by default PDFs are combined)
@@ -37,6 +49,10 @@ enum Commands {
         /// Request timeout in seconds
         #[arg(short = 't', long = "timeout", default_value = "30.0", value_parser = parse_timeout)]
         timeout: f64,
+
+        /// Limit the number of pages to download
+        #[arg(long = "pages", value_parser = parse_pages)]
+        pages: Option<usize>,
     },
     /// Merge existing PDF files into a single document
     Merge {
@@ -58,27 +74,47 @@ fn parse_timeout(s: &str) -> Result<f64, String> {
     Ok(value)
 }
 
+fn parse_pages(s: &str) -> Result<usize, String> {
+    let value = s.parse::<usize>().map_err(|_| "Not a valid number.")?;
+    if value == 0 {
+        return Err("Pages must be greater than 0.".to_string());
+    }
+    Ok(value)
+}
+
 
 #[tokio::main]
 async fn main() {
+    let args = Args::parse();
+
+    // Determine log level based on verbosity flags
+    let (book2pdf_level, global_level) = if args.debug {
+        ("trace", "warn")
+    } else if args.verbose {
+        ("debug", "warn")
+    } else if args.quiet {
+        ("error", "error")
+    } else {
+        ("info", "warn")
+    };
+
     // Set up logging with chromiumoxide errors suppressed
     let filter = EnvFilter::from_default_env()
         .add_directive("chromiumoxide::conn=off".parse().unwrap())
         .add_directive("chromiumoxide::handler=off".parse().unwrap())
-        .add_directive("book2pdf=info".parse().unwrap());
+        .add_directive(format!("book2pdf={}", book2pdf_level).parse().unwrap())
+        .add_directive(global_level.parse().unwrap());
     
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(filter)
         .init();
 
-    let args = Args::parse();
-
     let result = match args.command {
-        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout } => {
+        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout, pages } => {
             let combine = !no_combine; // Invert the logic: combine by default
             let downloader = Downloader::new(out_dir, combine, preserve_pages, timeout);
-            downloader.run(&url).await
+            downloader.run(&url, pages).await
         }
         Commands::Merge { input_dir, output_file } => {
             PdfMerger::merge_directory(&input_dir, &output_file).await
