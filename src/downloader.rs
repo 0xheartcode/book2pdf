@@ -65,8 +65,12 @@ impl Downloader {
         self
     }
 
-    pub async fn run(&self, target_url: &str, pages_limit: Option<usize>, show_browser: bool) -> Result<()> {
-        info!("Visiting \"{}\"", target_url.green());
+    pub async fn run(&self, target_url: &str, pages_limit: Option<usize>, show_browser: bool, simulate: bool) -> Result<()> {
+        if simulate {
+            info!("🔍 [SIMULATE] Would visit: \"{}\"", target_url.green());
+        } else {
+            info!("Visiting \"{}\"", target_url.green());
+        }
 
         let mut config_builder = BrowserConfig::builder();
         
@@ -98,7 +102,7 @@ impl Downloader {
             }
         });
 
-        let result = self.run_internal(&browser, target_url, pages_limit, show_browser).await;
+        let result = self.run_internal(&browser, target_url, pages_limit, show_browser, simulate).await;
 
         browser.close().await.ok();
         handle.abort();
@@ -106,7 +110,7 @@ impl Downloader {
         result
     }
 
-    async fn run_internal(&self, browser: &Browser, target_url: &str, pages_limit: Option<usize>, _show_browser: bool) -> Result<()> {
+    async fn run_internal(&self, browser: &Browser, target_url: &str, pages_limit: Option<usize>, _show_browser: bool, simulate: bool) -> Result<()> {
         let page = browser
             .new_page("about:blank")
             .await
@@ -176,41 +180,72 @@ impl Downloader {
 
         // Create output directory structure
         let pages_dir = PathBuf::from(&self.out_dir).join("pages");
-        fs::create_dir_all(&pages_dir)
-            .await
-            .map_err(|e| anyhow!("Failed to create pages directory: {}", e))?;
+        if simulate {
+            info!("🔍 [SIMULATE] Would create directory: {}", pages_dir.display());
+        } else {
+            fs::create_dir_all(&pages_dir)
+                .await
+                .map_err(|e| anyhow!("Failed to create pages directory: {}", e))?;
+        }
 
         let mut pdf_paths = Vec::new();
 
         // Create cover page with logo first
-        if let Ok(cover_path) = self.create_cover_page(browser, target_url).await {
+        if simulate {
+            let cover_path = PathBuf::from(&self.out_dir).join("pages").join("01_cover.pdf");
+            info!("🔍 [SIMULATE] Would create cover page: {}", cover_path.display());
             pdf_paths.push(cover_path);
+        } else {
+            if let Ok(cover_path) = self.create_cover_page(browser, target_url).await {
+                pdf_paths.push(cover_path);
+            }
         }
 
         // Use links in the order they were collected (navigation order) 
         // Start index from 2 since cover page takes index 1
         for (index, href) in links.iter().enumerate() {
-            if let Ok(path) = self.download_link(browser, target_url, href, index + 2).await {
-                pdf_paths.push(path);
+            if simulate {
+                let slug = self.href_to_slug(href);
+                if !slug.is_empty() {
+                    let filename = format!("{:02}_{}.pdf", index + 2, slug);
+                    let out_path = PathBuf::from(&self.out_dir).join("pages").join(filename);
+                    info!("🔍 [SIMULATE] Would download: {} -> {}", href, out_path.display());
+                    pdf_paths.push(out_path);
+                }
+            } else {
+                if let Ok(path) = self.download_link(browser, target_url, href, index + 2).await {
+                    pdf_paths.push(path);
+                }
             }
         }
 
         if self.combine && !pdf_paths.is_empty() {
-            let _combined_path = self.combine_all_pdfs(target_url, &pdf_paths).await?;
+            if simulate {
+                let url = Url::parse(target_url)?;
+                let domain_slug = slug::slugify(&url.host_str().unwrap_or("gitbook").replace('.', "-"));
+                let combined_path = PathBuf::from(&self.out_dir).join(format!("{}-combined.pdf", domain_slug));
+                info!("🔍 [SIMULATE] Would combine {} PDFs into: {}", pdf_paths.len(), combined_path.display());
+            } else {
+                let _combined_path = self.combine_all_pdfs(target_url, &pdf_paths).await?;
+            }
             
             // Delete individual pages unless preserve_pages is set
             if !self.preserve_pages {
-                info!("Cleaning up individual page files...");
-                for pdf_path in &pdf_paths {
-                    if let Err(e) = fs::remove_file(pdf_path).await {
-                        warn!("Failed to remove {}: {}", pdf_path.display(), e);
+                if simulate {
+                    info!("🔍 [SIMULATE] Would clean up {} individual page files", pdf_paths.len());
+                } else {
+                    info!("Cleaning up individual page files...");
+                    for pdf_path in &pdf_paths {
+                        if let Err(e) = fs::remove_file(pdf_path).await {
+                            warn!("Failed to remove {}: {}", pdf_path.display(), e);
+                        }
                     }
-                }
-                
-                // Remove pages directory if empty
-                if let Ok(mut entries) = fs::read_dir(&pages_dir).await {
-                    if entries.next_entry().await?.is_none() {
-                        let _ = fs::remove_dir(&pages_dir).await;
+                    
+                    // Remove pages directory if empty
+                    if let Ok(mut entries) = fs::read_dir(&pages_dir).await {
+                        if entries.next_entry().await?.is_none() {
+                            let _ = fs::remove_dir(&pages_dir).await;
+                        }
                     }
                 }
             }

@@ -23,6 +23,7 @@ margin_left = 0.0                   # Default: 0 inch left margin
 [scraping]
 # page_limit = 10                   # Default: no page limit (download all) - comment out for unlimited
 supported_sites = ["gitbook", "docusaurus"]  # Default supported platforms
+simulate = false                    # Default: false - set to true for dry-run mode
 
 [logging]
 level = "info"                      # Default: info level (options: error, info, debug, trace)

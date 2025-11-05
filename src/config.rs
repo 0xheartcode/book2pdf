@@ -46,6 +46,7 @@ pub struct PdfConfig {
 pub struct ScrapingConfig {
     pub page_limit: Option<usize>,
     pub supported_sites: Vec<String>,
+    pub simulate: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -106,6 +107,7 @@ impl Default for ScrapingConfig {
         Self {
             page_limit: None,
             supported_sites: vec!["gitbook".to_string(), "docusaurus".to_string()],
+            simulate: false,
         }
     }
 }

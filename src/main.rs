@@ -62,11 +62,15 @@ enum Commands {
         /// Show browser window (headless by default)
         #[arg(long = "show-browser")]
         show_browser: bool,
+
+        /// Simulate mode - execute everything but don't actually download or create files
+        #[arg(long = "simulate", short = 's')]
+        simulate: bool,
     },
     /// Merge existing PDF files into a single document
     Merge {
         /// Directory containing PDF files to merge
-        #[arg(short = 'd', long = "dir", default_value = "output/pages")]
+        #[arg(long = "dir", default_value = "output/pages")]
         input_dir: String,
 
         /// Output file path for the merged PDF
@@ -135,7 +139,7 @@ async fn main() {
         .init();
 
     let result = match args.command {
-        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout, pages, show_browser } => {
+        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout, pages, show_browser, simulate } => {
             // Use CLI args or fallback to config values
             let output_dir = out_dir.unwrap_or(config.output.folder.clone());
             let combine = if no_combine { false } else { config.output.combine_pdfs };
@@ -148,10 +152,12 @@ async fn main() {
             tracing::debug!("Using timeout: {}", timeout_val);
             tracing::debug!("Using combine: {}", combine);
             tracing::debug!("Using show_window: {}", show_window);
+            tracing::debug!("Using simulate: {}", simulate);
             
             let downloader = Downloader::new(output_dir, combine, preserve, timeout_val)
                 .with_pdf_config(&config.pdf);
-            downloader.run(&url, pages.or(config.scraping.page_limit), show_window).await
+            let simulate_mode = simulate || config.scraping.simulate;
+            downloader.run(&url, pages.or(config.scraping.page_limit), show_window, simulate_mode).await
         }
         Commands::Merge { input_dir, output_file } => {
             PdfMerger::merge_directory(&input_dir, &output_file).await
