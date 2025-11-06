@@ -3,12 +3,38 @@
 A CLI utility to convert documentation websites into PDF files for offline reading.
 
 **⚠️ Clunky Alpha Software** - Basic functionality works but expect stability issues.
-
+Documentations with multiple pages may take up all your ram 🤯. Be safe.
 ## Requirements
 
 - **Rust 1.70+** - [Install Rust](https://rustup.rs/)
 - **Chrome/Chromium browser** - Must be installed and accessible in PATH
 - **Internet connection** - For website scraping
+
+## Supported Documentation Formats
+
+book2pdf automatically detects and supports the following documentation platforms:
+
+### GitBook
+- **Versions**: v2.x, v3.x, v4.x
+- **Format**: gitbook
+- **Auto-detection**: Based on GitBook-specific selectors and navigation patterns
+
+### Docusaurus
+- **Versions**: v1.x, v2.x, v3.x, v4.x
+- **Format**: docusaurus  
+- **Auto-detection**: Detects Docusaurus metadata and navigation structure
+
+### MkDocs
+- **Versions**: Material theme, ReadTheDocs theme, Standard theme
+- **Format**: mkdocs
+- **Auto-detection**: Supports multiple MkDocs themes with automatic theme detection
+
+To see all supported formats, run:
+```bash
+cargo run -- download --list
+```
+
+**Note**: Version detection is automatic and best-effort. Some versions may be detected as ranges (e.g., v2.x) when specific version cannot be determined.
 
 ## Installation
 

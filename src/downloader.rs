@@ -438,6 +438,12 @@ impl Downloader {
             .map_err(|e| anyhow!("Failed to write cover PDF: {}", e))?;
 
         info!("Cover page created: {}", &cover_path.display().to_string());
+        
+        // Close the page to free memory
+        if let Err(e) = page.close().await {
+            debug!("Failed to close cover page (non-critical): {}", e);
+        }
+        
         Ok(cover_path)
     }
 
@@ -505,6 +511,11 @@ impl Downloader {
         fs::write(path, pdf_data)
             .await
             .map_err(|e| anyhow!("Failed to write PDF to {}: {}", path.display(), e))?;
+
+        // Close the page to free memory
+        if let Err(e) = page.close().await {
+            debug!("Failed to close page (non-critical): {}", e);
+        }
 
         Ok(())
     }
