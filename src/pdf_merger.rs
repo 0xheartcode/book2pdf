@@ -3,7 +3,7 @@ use lopdf::{Document, Object};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::{debug, info};
-use colored::*;
+
 
 pub struct PdfMerger {
     documents: Vec<(String, Document)>,
@@ -43,7 +43,7 @@ impl PdfMerger {
             return Err(anyhow!("Input directory '{}' does not exist", input_dir));
         }
 
-        info!("Scanning directory: {}", input_dir.green());
+        info!("Scanning directory: {}", input_dir);
         
         let mut entries = fs::read_dir(&input_path).await?;
         let mut pdf_files = Vec::new();
@@ -66,7 +66,7 @@ impl PdfMerger {
         
         info!("Found {} PDF files to merge:", pdf_files.len());
         for (i, path) in pdf_files.iter().enumerate() {
-            info!("  {}: {}", i + 1, path.file_name().unwrap().to_string_lossy().blue());
+            info!("  {}: {}", i + 1, &path.file_name().unwrap().to_string_lossy());
         }
         
         let mut merger = PdfMerger::new();
@@ -83,7 +83,7 @@ impl PdfMerger {
         
         info!("Successfully merged {} PDFs into: {}", 
               pdf_files.len(), 
-              output_path.display().to_string().green());
+              &output_path.display().to_string());
         
         Ok(())
     }

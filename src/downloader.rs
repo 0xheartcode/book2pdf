@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
 use chromiumoxide::cdp::browser_protocol::page::PrintToPdfParams;
 use chromiumoxide::{Browser, BrowserConfig};
-use colored::*;
 use futures_util::StreamExt;
 use slug::slugify;
 use std::path::{Path, PathBuf};
@@ -11,6 +10,7 @@ use tracing::{debug, error, info, warn};
 use url::Url;
 
 use crate::{PdfMerger, config::PdfConfig, HandlersRegistry};
+
 
 #[derive(Debug, Clone)]
 pub struct PdfOptions {
@@ -67,9 +67,9 @@ impl Downloader {
 
     pub async fn run(&self, target_url: &str, pages_limit: Option<usize>, show_browser: bool, simulate: bool) -> Result<()> {
         if simulate {
-            info!("🔍 [SIMULATE] Would visit: \"{}\"", target_url.green());
+            info!("🔍 [SIMULATE] Would visit: \"{}\"", target_url);
         } else {
-            info!("Visiting \"{}\"", target_url.green());
+            info!("Visiting \"{}\"", target_url);
         }
 
         let mut config_builder = BrowserConfig::builder();
@@ -104,8 +104,15 @@ impl Downloader {
 
         let result = self.run_internal(&browser, target_url, pages_limit, show_browser, simulate).await;
 
-        browser.close().await.ok();
+        // Explicitly close browser to avoid warning
+        if let Err(e) = browser.close().await {
+            debug!("Browser close error (non-critical): {}", e);
+        }
+        
+        // Give browser more time to close gracefully and wait for handler to finish
+        tokio::time::sleep(Duration::from_millis(500)).await;
         handle.abort();
+        let _ = handle.await;
 
         result
     }
@@ -143,7 +150,7 @@ impl Downloader {
 
             if let Some(result) = first_doc_link {
                 if let Ok(doc_link) = result.into_value::<String>() {
-                    info!("Navigating to documentation page to load sidebar: {}", doc_link.green());
+                    info!("Navigating to documentation page to load sidebar: {}", &doc_link);
                     page.goto(&doc_link)
                         .await
                         .map_err(|e| anyhow!("Failed to navigate to doc page: {}", e))?;
@@ -156,13 +163,13 @@ impl Downloader {
         let handler = self.handlers_registry.detect_format(target_url, &page).await?
             .ok_or_else(|| anyhow!("No suitable format handler found for this site"))?;
 
-        info!("Detected format: {}", handler.name().green());
+        info!("Detected format: {}", handler.name());
         
         // Detect version (lightweight)
         if let Ok(Some(version)) = handler.detect_version(&page).await {
-            info!("Version: {}", version.green());
+            info!("Version: {}", &version);
         } else {
-            info!("Version: {}", "Unknown".yellow());
+            info!("Version: {}", "Unknown");
         }
 
         // Use the handler to expand navigation and extract links
@@ -430,7 +437,7 @@ impl Downloader {
             .await
             .map_err(|e| anyhow!("Failed to write cover PDF: {}", e))?;
 
-        info!("Cover page created: {}", cover_path.display().to_string().blue());
+        info!("Cover page created: {}", &cover_path.display().to_string());
         Ok(cover_path)
     }
 
@@ -439,7 +446,7 @@ impl Downloader {
         let slug = self.href_to_slug(href);
 
         if slug.is_empty() {
-            warn!("Empty slug, ignoring \"{}\"", href.green());
+            warn!("Empty slug, ignoring \"{}\"", href);
             return Err(anyhow!("Empty slug"));
         }
 
@@ -456,7 +463,9 @@ impl Downloader {
     }
 
     async fn download_page(&self, browser: &Browser, url: &Url, path: &Path, handler: &dyn crate::FormatHandler) -> Result<()> {
-        info!("Downloading \"{}\" into \"{}\"", url.to_string().green(), path.display().to_string().blue());
+        info!("Downloading \"{}\" into \"{}\"", 
+              &url.to_string(), 
+              &path.display().to_string());
 
         let page = browser
             .new_page("about:blank")
@@ -530,7 +539,7 @@ impl Downloader {
 
         merger.save(&combined_path).await?;
 
-        info!("Combined PDF saved to: {}", combined_path.display().to_string().blue());
+        info!("Combined PDF saved to: {}", &combined_path.display().to_string());
 
         Ok(combined_path)
     }

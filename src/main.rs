@@ -1,11 +1,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use colored::*;
 use book2pdf::{Downloader, PdfMerger, Config, HandlersRegistry};
 use std::path::PathBuf;
 use std::process;
 use tracing::error;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
 
 #[derive(Parser)]
 #[command(name = "book2pdf")]
@@ -189,7 +189,7 @@ async fn main() {
     };
 
     if let Err(e) = result {
-        error!("{}", format!("Error: {}", e).red());
+        error!("{}", &format!("Error: {}", e));
         process::exit(1);
     }
 }
