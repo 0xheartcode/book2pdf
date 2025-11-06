@@ -116,6 +116,7 @@ impl HandlersRegistry {
         // Register built-in handlers
         registry.register(Box::new(gitbook::GitBookHandler));
         registry.register(Box::new(docusaurus::DocusaurusHandler));
+        registry.register(Box::new(mkdocs::MkDocsHandler));
         
         registry
     }
@@ -129,6 +130,8 @@ impl Default for HandlersRegistry {
 
 pub mod gitbook;
 pub mod docusaurus;
+pub mod mkdocs;
 
 pub use gitbook::GitBookHandler;
 pub use docusaurus::DocusaurusHandler;
+pub use mkdocs::MkDocsHandler;
