@@ -43,6 +43,9 @@ pub trait FormatHandler: SiteDetector + Send + Sync {
     
     /// Get a human-readable name for this handler
     fn name(&self) -> &str;
+    
+    /// Get supported versions info for listing
+    fn supported_versions(&self) -> Vec<&str>;
 }
 
 /// Registry for managing format handlers
@@ -88,6 +91,22 @@ impl HandlersRegistry {
     /// Get all registered handlers
     pub fn handlers(&self) -> &[Box<dyn FormatHandler>] {
         &self.handlers
+    }
+    
+    /// List all supported formats and versions
+    pub fn list_supported_formats(&self) {
+        println!("Supported Documentation Formats:");
+        println!();
+        
+        for handler in &self.handlers {
+            println!("{}", handler.name());
+            println!("   Format: {}", handler.format_name());
+            println!("   Supported Versions: {}", handler.supported_versions().join(", "));
+            println!();
+        }
+        
+        println!("   Note: Version detection is automatic and best-effort");
+        println!("   Some versions may be detected as ranges (e.g., v2.x) when specific version cannot be determined");
     }
     
     /// Create a registry with default handlers

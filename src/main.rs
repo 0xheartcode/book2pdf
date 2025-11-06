@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
-use book2pdf::{Downloader, PdfMerger, Config};
+use book2pdf::{Downloader, PdfMerger, Config, HandlersRegistry};
 use std::path::PathBuf;
 use std::process;
 use tracing::error;
@@ -34,13 +34,14 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Download and convert documentation website to a combined PDF (default behavior)
+    /// Download and convert documentation websites into PDFs for offline reading
     Download {
-        /// URL of the website to scrape
-        url: String,
+        /// URL of the website to scrape (not required with --list)
+        #[arg(required_unless_present = "list")]
+        url: Option<String>,
 
         /// Output directory used to save files
-        #[arg(short = 'o', long = "outDir")]
+        #[arg(short = 'o', long = "out-dir")]
         out_dir: Option<String>,
 
         /// Don't combine PDFs into a single file (by default PDFs are combined)
@@ -66,8 +67,15 @@ enum Commands {
         /// Simulate mode - execute everything but don't actually download or create files
         #[arg(long = "simulate", short = 's')]
         simulate: bool,
+
+        /// List all supported formats and versions (no URL required)
+        #[arg(long = "list")]
+        list: bool,
     },
     /// Merge existing PDF files into a single document
+    ///
+    /// Useful for combining PDFs from 'download --no-combine' or creating
+    /// custom collections. Default directory contains pages from previous downloads.
     Merge {
         /// Directory containing PDF files to merge
         #[arg(long = "dir", default_value = "output/pages")]
@@ -139,7 +147,23 @@ async fn main() {
         .init();
 
     let result = match args.command {
-        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout, pages, show_browser, simulate } => {
+        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout, pages, show_browser, simulate, list } => {
+            // Handle --list flag first
+            if list {
+                let registry = HandlersRegistry::default();
+                registry.list_supported_formats();
+                return;
+            }
+            
+            // URL is required for actual download
+            let url = match url {
+                Some(u) => u,
+                None => {
+                    eprintln!("Error: URL is required for download operation");
+                    process::exit(1);
+                }
+            };
+            
             // Use CLI args or fallback to config values
             let output_dir = out_dir.unwrap_or(config.output.folder.clone());
             let combine = if no_combine { false } else { config.output.combine_pdfs };

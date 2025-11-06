@@ -214,4 +214,8 @@ impl FormatHandler for GitBookHandler {
     fn name(&self) -> &str {
         "GitBook Handler"
     }
+    
+    fn supported_versions(&self) -> Vec<&str> {
+        vec!["v2.x", "v3.x", "v4.x"]
+    }
 }

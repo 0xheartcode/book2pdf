@@ -234,4 +234,8 @@ impl FormatHandler for DocusaurusHandler {
     fn name(&self) -> &str {
         "Docusaurus Handler"
     }
+    
+    fn supported_versions(&self) -> Vec<&str> {
+        vec!["v1.x", "v2.x", "v3.x", "v4.x"]
+    }
 }
