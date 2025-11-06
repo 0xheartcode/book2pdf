@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
     #[serde(default)]
     pub output: OutputConfig,
@@ -55,18 +55,6 @@ pub struct LoggingConfig {
     pub suppress_browser_logs: bool,
 }
 
-// Default implementations
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            output: OutputConfig::default(),
-            browser: BrowserConfig::default(),
-            pdf: PdfConfig::default(),
-            scraping: ScrapingConfig::default(),
-            logging: LoggingConfig::default(),
-        }
-    }
-}
 
 impl Default for OutputConfig {
     fn default() -> Self {

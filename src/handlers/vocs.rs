@@ -16,7 +16,7 @@ impl SiteDetector for VocsHandler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         
@@ -56,9 +56,7 @@ impl SiteDetector for VocsHandler {
         // Confidence logic
         if has_data_vocs && vocs_class_matches >= 3 {
             Ok(ConfidenceLevel::Certain)
-        } else if has_data_vocs && vocs_class_matches >= 1 {
-            Ok(ConfidenceLevel::High)
-        } else if vocs_class_matches >= 3 && has_vocs_patterns {
+        } else if (has_data_vocs && vocs_class_matches >= 1) || (vocs_class_matches >= 3 && has_vocs_patterns) {
             Ok(ConfidenceLevel::High)
         } else if vocs_class_matches >= 2 || has_vocs_patterns {
             Ok(ConfidenceLevel::Medium)
@@ -129,7 +127,7 @@ impl FormatHandler for VocsHandler {
                 
                 console.log('vocs navigation expanded');
             })()
-        "#).await.map_err(|e| anyhow!("Failed to expand navigation: {}", e))?;
+        "#).await.map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
         
         Ok(())
     }
@@ -140,7 +138,7 @@ impl FormatHandler for VocsHandler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         
@@ -317,7 +315,7 @@ impl FormatHandler for VocsHandler {
                 
                 console.log('vocs page prepared for PDF');
             })()
-        "#).await.map_err(|e| anyhow!("Failed to prepare page: {}", e))?;
+        "#).await.map_err(|e| anyhow!("Failed to prepare page: {e}"))?;
         
         Ok(())
     }

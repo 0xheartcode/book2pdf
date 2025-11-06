@@ -17,7 +17,7 @@ impl SiteDetector for MkDocsHandler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         // High confidence - explicit MkDocs mentions
         if content.contains("Material for MkDocs") || content.contains("Made with Material for MkDocs") {
@@ -105,7 +105,7 @@ impl FormatHandler for MkDocsHandler {
 
         page.evaluate(js_code)
             .await
-            .map_err(|e| anyhow!("Failed to expand MkDocs navigation: {}", e))?;
+            .map_err(|e| anyhow!("Failed to expand MkDocs navigation: {e}"))?;
 
         Ok(())
     }
@@ -114,7 +114,7 @@ impl FormatHandler for MkDocsHandler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         let mut links = Vec::new();
@@ -185,7 +185,7 @@ impl FormatHandler for MkDocsHandler {
                     if let Some(version_end) = content[start + version_start + 1..start + version_start + 20].find(&['"', '\'', ' '][..]) {
                         let version = &content[start + version_start + 1..start + version_start + 1 + version_end];
                         if !version.is_empty() && version.chars().next().unwrap().is_ascii_digit() {
-                            return Ok(Some(format!("Material v{}", version)));
+                            return Ok(Some(format!("Material v{version}")));
                         }
                     }
                 }
@@ -270,7 +270,7 @@ impl FormatHandler for MkDocsHandler {
 
         page.evaluate(js_code)
             .await
-            .map_err(|e| anyhow!("Failed to prepare MkDocs page: {}", e))?;
+            .map_err(|e| anyhow!("Failed to prepare MkDocs page: {e}"))?;
 
         Ok(())
     }

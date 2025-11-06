@@ -112,7 +112,7 @@ async fn main() {
     let config = match Config::load(args.config.as_deref()) {
         Ok(config) => config,
         Err(e) => {
-            eprintln!("Failed to load config: {}", e);
+            eprintln!("Failed to load config: {e}");
             process::exit(1);
         }
     };
@@ -138,7 +138,7 @@ async fn main() {
     let filter = EnvFilter::from_default_env()
         .add_directive("chromiumoxide::conn=off".parse().unwrap())
         .add_directive("chromiumoxide::handler=off".parse().unwrap())
-        .add_directive(format!("book2pdf={}", book2pdf_level).parse().unwrap())
+        .add_directive(format!("book2pdf={book2pdf_level}").parse().unwrap())
         .add_directive(global_level.parse().unwrap());
     
     tracing_subscriber::registry()
@@ -189,7 +189,7 @@ async fn main() {
     };
 
     if let Err(e) = result {
-        error!("{}", &format!("Error: {}", e));
+        error!("{}", &format!("Error: {e}"));
         process::exit(1);
     }
 }

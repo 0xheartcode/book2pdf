@@ -81,11 +81,11 @@ impl Downloader {
         let config = config_builder
             .window_size(1920, 1080)  // Larger viewport for better rendering
             .build()
-            .map_err(|e| anyhow!("Failed to create browser config: {}", e))?;
+            .map_err(|e| anyhow!("Failed to create browser config: {e}"))?;
 
         let (mut browser, mut handler) = Browser::launch(config)
             .await
-            .map_err(|e| anyhow!("Failed to launch browser: {}", e))?;
+            .map_err(|e| anyhow!("Failed to launch browser: {e}"))?;
 
         let handle = tokio::spawn(async move {
             while let Some(h) = handler.next().await {
@@ -121,15 +121,15 @@ impl Downloader {
         let page = browser
             .new_page("about:blank")
             .await
-            .map_err(|e| anyhow!("Failed to create new page: {}", e))?;
+            .map_err(|e| anyhow!("Failed to create new page: {e}"))?;
 
         page.goto(target_url)
             .await
-            .map_err(|e| anyhow!("Failed to navigate to {}: {}", target_url, e))?;
+            .map_err(|e| anyhow!("Failed to navigate to {target_url}: {e}"))?;
 
         page.wait_for_navigation()
             .await
-            .map_err(|e| anyhow!("Failed to wait for navigation: {}", e))?;
+            .map_err(|e| anyhow!("Failed to wait for navigation: {e}"))?;
 
         // Wait for the page to fully load
         tokio::time::sleep(Duration::from_millis(3000)).await;
@@ -153,7 +153,7 @@ impl Downloader {
                     info!("Navigating to documentation page to load sidebar: {}", &doc_link);
                     page.goto(&doc_link)
                         .await
-                        .map_err(|e| anyhow!("Failed to navigate to doc page: {}", e))?;
+                        .map_err(|e| anyhow!("Failed to navigate to doc page: {e}"))?;
                     tokio::time::sleep(Duration::from_millis(2000)).await;
                 }
             }
@@ -196,7 +196,7 @@ impl Downloader {
         } else {
             fs::create_dir_all(&pages_dir)
                 .await
-                .map_err(|e| anyhow!("Failed to create pages directory: {}", e))?;
+                .map_err(|e| anyhow!("Failed to create pages directory: {e}"))?;
         }
 
         let mut pdf_paths = Vec::new();
@@ -206,10 +206,8 @@ impl Downloader {
             let cover_path = PathBuf::from(&self.out_dir).join("pages").join("01_cover.pdf");
             info!("🔍 [SIMULATE] Would create cover page: {}", cover_path.display());
             pdf_paths.push(cover_path);
-        } else {
-            if let Ok(cover_path) = self.create_cover_page(browser, target_url).await {
-                pdf_paths.push(cover_path);
-            }
+        } else if let Ok(cover_path) = self.create_cover_page(browser, target_url).await {
+            pdf_paths.push(cover_path);
         }
 
         // Use links in the order they were collected (navigation order) 
@@ -223,18 +221,16 @@ impl Downloader {
                     info!("🔍 [SIMULATE] Would download: {} -> {}", href, out_path.display());
                     pdf_paths.push(out_path);
                 }
-            } else {
-                if let Ok(path) = self.download_link(browser, target_url, href, index + 2, handler).await {
-                    pdf_paths.push(path);
-                }
+            } else if let Ok(path) = self.download_link(browser, target_url, href, index + 2, handler).await {
+                pdf_paths.push(path);
             }
         }
 
         if self.combine && !pdf_paths.is_empty() {
             if simulate {
                 let url = Url::parse(target_url)?;
-                let domain_slug = slug::slugify(&url.host_str().unwrap_or("gitbook").replace('.', "-"));
-                let combined_path = PathBuf::from(&self.out_dir).join(format!("{}-combined.pdf", domain_slug));
+                let domain_slug = slug::slugify(url.host_str().unwrap_or("gitbook").replace('.', "-"));
+                let combined_path = PathBuf::from(&self.out_dir).join(format!("{domain_slug}-combined.pdf"));
                 info!("🔍 [SIMULATE] Would combine {} PDFs into: {}", pdf_paths.len(), combined_path.display());
             } else {
                 let _combined_path = self.combine_all_pdfs(target_url, &pdf_paths).await?;
@@ -271,16 +267,16 @@ impl Downloader {
         let page = browser
             .new_page("about:blank")
             .await
-            .map_err(|e| anyhow!("Failed to create cover page: {}", e))?;
+            .map_err(|e| anyhow!("Failed to create cover page: {e}"))?;
 
         // Go to the main site to extract logo and title
         page.goto(target_url)
             .await
-            .map_err(|e| anyhow!("Failed to navigate to {}: {}", target_url, e))?;
+            .map_err(|e| anyhow!("Failed to navigate to {target_url}: {e}"))?;
 
         page.wait_for_navigation()
             .await
-            .map_err(|e| anyhow!("Failed to wait for navigation: {}", e))?;
+            .map_err(|e| anyhow!("Failed to wait for navigation: {e}"))?;
 
         tokio::time::sleep(Duration::from_millis(2000)).await;
 
@@ -319,10 +315,10 @@ impl Downloader {
                     url: window.location.href
                 };
             })()
-        "#).await.map_err(|e| anyhow!("Failed to extract site info: {}", e))?;
+        "#).await.map_err(|e| anyhow!("Failed to extract site info: {e}"))?;
 
         let site_data: serde_json::Value = site_info.into_value()
-            .map_err(|e| anyhow!("Failed to parse site info: {}", e))?;
+            .map_err(|e| anyhow!("Failed to parse site info: {e}"))?;
 
         let title = site_data["title"].as_str().unwrap_or("Documentation");
         let logo_url = site_data["logo"].as_str();
@@ -330,7 +326,7 @@ impl Downloader {
 
         // Create HTML cover page
         let logo_html = if let Some(logo) = logo_url {
-            format!(r#"<img src="{}" alt="Logo" style="max-width: 300px; max-height: 200px; margin-bottom: 30px;">"#, logo)
+            format!(r#"<img src="{logo}" alt="Logo" style="max-width: 300px; max-height: 200px; margin-bottom: 30px;">"#)
         } else {
             String::new()
         };
@@ -393,19 +389,19 @@ impl Downloader {
             </head>
             <body>
                 <div class="container">
-                    {}
-                    <h1>{}</h1>
+                    {logo_html}
+                    <h1>{title}</h1>
                     <div class="subtitle">Documentation Export</div>
-                    <div class="url">{}</div>
+                    <div class="url">{site_url}</div>
                 </div>
                 <div class="generated">Generated with book2pdf</div>
             </body>
             </html>
-        "#, logo_html, title, site_url);
+        "#);
 
         // Set the HTML content
         page.set_content(&cover_html).await
-            .map_err(|e| anyhow!("Failed to set cover page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to set cover page content: {e}"))?;
 
         tokio::time::sleep(Duration::from_millis(1000)).await;
 
@@ -416,7 +412,7 @@ impl Downloader {
         if let Some(parent) = cover_path.parent() {
             fs::create_dir_all(parent)
                 .await
-                .map_err(|e| anyhow!("Failed to create directory: {}", e))?;
+                .map_err(|e| anyhow!("Failed to create directory: {e}"))?;
         }
 
         let params = PrintToPdfParams {
@@ -431,11 +427,11 @@ impl Downloader {
         let pdf_data = page
             .pdf(params)
             .await
-            .map_err(|e| anyhow!("Failed to generate cover PDF: {}", e))?;
+            .map_err(|e| anyhow!("Failed to generate cover PDF: {e}"))?;
 
         fs::write(&cover_path, pdf_data)
             .await
-            .map_err(|e| anyhow!("Failed to write cover PDF: {}", e))?;
+            .map_err(|e| anyhow!("Failed to write cover PDF: {e}"))?;
 
         info!("Cover page created: {}", &cover_path.display().to_string());
         
@@ -456,12 +452,12 @@ impl Downloader {
             return Err(anyhow!("Empty slug"));
         }
 
-        let filename = format!("{:02}_{}.pdf", index, slug);
+        let filename = format!("{index:02}_{slug}.pdf");
         let out_path = PathBuf::from(&self.out_dir).join("pages").join(filename);
 
         let url = Url::parse(target_url)?
             .join(href)
-            .map_err(|e| anyhow!("Failed to join URL: {}", e))?;
+            .map_err(|e| anyhow!("Failed to join URL: {e}"))?;
 
         self.download_page(browser, &url, &out_path, handler).await?;
 
@@ -476,20 +472,20 @@ impl Downloader {
         let page = browser
             .new_page("about:blank")
             .await
-            .map_err(|e| anyhow!("Failed to create new page: {}", e))?;
+            .map_err(|e| anyhow!("Failed to create new page: {e}"))?;
 
         page.goto(url.as_str())
             .await
-            .map_err(|e| anyhow!("Failed to navigate to {}: {}", url, e))?;
+            .map_err(|e| anyhow!("Failed to navigate to {url}: {e}"))?;
 
         page.wait_for_navigation()
             .await
-            .map_err(|e| anyhow!("Failed to wait for navigation: {}", e))?;
+            .map_err(|e| anyhow!("Failed to wait for navigation: {e}"))?;
 
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
                 .await
-                .map_err(|e| anyhow!("Failed to create directory: {}", e))?;
+                .map_err(|e| anyhow!("Failed to create directory: {e}"))?;
         }
 
         handler.prepare_page(&page).await?;
@@ -506,7 +502,7 @@ impl Downloader {
         let pdf_data = page
             .pdf(params)
             .await
-            .map_err(|e| anyhow!("Failed to generate PDF: {}", e))?;
+            .map_err(|e| anyhow!("Failed to generate PDF: {e}"))?;
 
         fs::write(path, pdf_data)
             .await
@@ -536,8 +532,8 @@ impl Downloader {
         info!("Combining all PDFs into a single file...");
 
         let url = Url::parse(target_url)?;
-        let domain_slug = slugify(&url.host_str().unwrap_or("gitbook").replace('.', "-"));
-        let combined_path = PathBuf::from(&self.out_dir).join(format!("{}-combined.pdf", domain_slug));
+        let domain_slug = slugify(url.host_str().unwrap_or("gitbook").replace('.', "-"));
+        let combined_path = PathBuf::from(&self.out_dir).join(format!("{domain_slug}-combined.pdf"));
 
         let mut merger = PdfMerger::new();
         

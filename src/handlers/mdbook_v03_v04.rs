@@ -16,7 +16,7 @@ impl SiteDetector for MdBookV03V04Handler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         
@@ -95,7 +95,7 @@ impl FormatHandler for MdBookV03V04Handler {
                 // v0.3-v0.4 typically doesn't have complex collapsible navigation
                 console.log('mdBook v0.3-v0.4 navigation expanded (no action needed)');
             })()
-        "#).await.map_err(|e| anyhow!("Failed to expand navigation: {}", e))?;
+        "#).await.map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
         
         Ok(())
     }
@@ -106,7 +106,7 @@ impl FormatHandler for MdBookV03V04Handler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         
@@ -216,7 +216,7 @@ impl FormatHandler for MdBookV03V04Handler {
                 
                 console.log('mdBook v0.3-v0.4 page prepared for PDF');
             })()
-        "#).await.map_err(|e| anyhow!("Failed to prepare page: {}", e))?;
+        "#).await.map_err(|e| anyhow!("Failed to prepare page: {e}"))?;
         
         Ok(())
     }

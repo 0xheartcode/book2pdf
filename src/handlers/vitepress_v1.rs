@@ -16,7 +16,7 @@ impl SiteDetector for VitePressV1Handler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         
@@ -128,7 +128,7 @@ impl FormatHandler for VitePressV1Handler {
                 
                 console.log('VitePress v1.x navigation expanded');
             })()
-        "#).await.map_err(|e| anyhow!("Failed to expand navigation: {}", e))?;
+        "#).await.map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
         
         Ok(())
     }
@@ -139,7 +139,7 @@ impl FormatHandler for VitePressV1Handler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         
@@ -304,7 +304,7 @@ impl FormatHandler for VitePressV1Handler {
                 
                 console.log('VitePress v1.x page prepared for PDF');
             })()
-        "#).await.map_err(|e| anyhow!("Failed to prepare page: {}", e))?;
+        "#).await.map_err(|e| anyhow!("Failed to prepare page: {e}"))?;
         
         Ok(())
     }

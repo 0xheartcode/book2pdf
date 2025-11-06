@@ -17,7 +17,7 @@ impl SiteDetector for DocusaurusHandler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         
@@ -41,7 +41,7 @@ impl SiteDetector for DocusaurusHandler {
         
         // Check for Docusaurus in script content
         let script_selector = Selector::parse("script")
-            .map_err(|e| anyhow!("Invalid selector: {}", e))?;
+            .map_err(|e| anyhow!("Invalid selector: {e}"))?;
         for script in document.select(&script_selector) {
             let content = script.text().collect::<String>();
             if content.contains("docusaurus") || content.contains("__DOCUSAURUS__") {
@@ -94,7 +94,7 @@ impl FormatHandler for DocusaurusHandler {
 
         page.evaluate(js_code)
             .await
-            .map_err(|e| anyhow!("Failed to expand Docusaurus navigation: {}", e))?;
+            .map_err(|e| anyhow!("Failed to expand Docusaurus navigation: {e}"))?;
 
         Ok(())
     }
@@ -103,7 +103,7 @@ impl FormatHandler for DocusaurusHandler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         let mut links = Vec::new();
@@ -124,11 +124,10 @@ impl FormatHandler for DocusaurusHandler {
             if let Ok(selector) = Selector::parse(selector_str) {
                 for element in document.select(&selector) {
                     if let Some(href) = element.value().attr("href") {
-                        if href.starts_with('/') && !href.contains('#') && !href.contains("/assets/") {
-                            if seen.insert(href.to_string()) {
+                        if href.starts_with('/') && !href.contains('#') && !href.contains("/assets/")
+                            && seen.insert(href.to_string()) {
                                 links.push(href.to_string());
                             }
-                        }
                     }
                 }
             }
@@ -167,7 +166,7 @@ impl FormatHandler for DocusaurusHandler {
                 let search_start = start + version_start + 11;
                 if let Some(version_end) = content[search_start..search_start + 50].find('"') {
                     let version = &content[search_start..search_start + version_end];
-                    return Ok(Some(format!("v{}", version)));
+                    return Ok(Some(format!("v{version}")));
                 }
             }
         }
@@ -226,7 +225,7 @@ impl FormatHandler for DocusaurusHandler {
 
         page.evaluate(js_code)
             .await
-            .map_err(|e| anyhow!("Failed to prepare Docusaurus page: {}", e))?;
+            .map_err(|e| anyhow!("Failed to prepare Docusaurus page: {e}"))?;
 
         Ok(())
     }

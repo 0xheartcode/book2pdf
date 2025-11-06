@@ -17,13 +17,13 @@ impl SiteDetector for GitBookHandler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         
         // Check for old GitBook format
         let old_format_selector = Selector::parse("body > .gitbook-root")
-            .map_err(|e| anyhow!("Invalid selector: {}", e))?;
+            .map_err(|e| anyhow!("Invalid selector: {e}"))?;
         if document.select(&old_format_selector).next().is_some() {
             return Ok(ConfidenceLevel::Certain);
         }
@@ -49,7 +49,7 @@ impl SiteDetector for GitBookHandler {
         // Check body class for theme indication
         if confidence == ConfidenceLevel::None {
             let body_selector = Selector::parse("body")
-                .map_err(|e| anyhow!("Invalid selector: {}", e))?;
+                .map_err(|e| anyhow!("Invalid selector: {e}"))?;
             if let Some(body) = document.select(&body_selector).next() {
                 if let Some(class) = body.value().attr("class") {
                     if class.contains("theme-") {
@@ -102,7 +102,7 @@ impl FormatHandler for GitBookHandler {
 
         page.evaluate(js_code)
             .await
-            .map_err(|e| anyhow!("Failed to expand GitBook navigation: {}", e))?;
+            .map_err(|e| anyhow!("Failed to expand GitBook navigation: {e}"))?;
 
         Ok(())
     }
@@ -111,7 +111,7 @@ impl FormatHandler for GitBookHandler {
         let content = page
             .content()
             .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
+            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
         
         let document = Html::parse_document(&content);
         let mut links = Vec::new();
@@ -130,11 +130,10 @@ impl FormatHandler for GitBookHandler {
             if let Ok(selector) = Selector::parse(selector_str) {
                 for element in document.select(&selector) {
                     if let Some(href) = element.value().attr("href") {
-                        if href.starts_with('/') && !href.contains('#') && !href.contains("/assets/") {
-                            if seen.insert(href.to_string()) {
+                        if href.starts_with('/') && !href.contains('#') && !href.contains("/assets/")
+                            && seen.insert(href.to_string()) {
                                 links.push(href.to_string());
                             }
-                        }
                     }
                 }
             }
@@ -206,7 +205,7 @@ impl FormatHandler for GitBookHandler {
 
         page.evaluate(js_code)
             .await
-            .map_err(|e| anyhow!("Failed to prepare GitBook page: {}", e))?;
+            .map_err(|e| anyhow!("Failed to prepare GitBook page: {e}"))?;
 
         Ok(())
     }
