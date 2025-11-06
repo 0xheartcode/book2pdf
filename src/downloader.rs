@@ -3,16 +3,14 @@ use chromiumoxide::cdp::browser_protocol::page::PrintToPdfParams;
 use chromiumoxide::{Browser, BrowserConfig};
 use colored::*;
 use futures_util::StreamExt;
-use scraper::{Html, Selector};
 use slug::slugify;
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs;
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-use crate::{PdfMerger, config::PdfConfig};
+use crate::{PdfMerger, config::PdfConfig, HandlersRegistry};
 
 #[derive(Debug, Clone)]
 pub struct PdfOptions {
@@ -41,6 +39,7 @@ pub struct Downloader {
     preserve_pages: bool,
     _timeout: Duration,
     pdf_options: PdfOptions,
+    handlers_registry: HandlersRegistry,
 }
 
 impl Downloader {
@@ -51,6 +50,7 @@ impl Downloader {
             preserve_pages,
             _timeout: Duration::from_secs_f64(timeout_seconds),
             pdf_options: PdfOptions::default(),
+            handlers_registry: HandlersRegistry::default(),
         }
     }
 
@@ -152,22 +152,26 @@ impl Downloader {
             }
         }
 
-        self.expand_menu_links(&page).await?;
+        // Detect the appropriate format handler
+        let handler = self.handlers_registry.detect_format(target_url, &page).await?
+            .ok_or_else(|| anyhow!("No suitable format handler found for this site"))?;
+
+        info!("Detected format: {}", handler.name().green());
+        
+        // Detect version (lightweight)
+        if let Ok(Some(version)) = handler.detect_version(&page).await {
+            info!("Version: {}", version.green());
+        } else {
+            info!("Version: {}", "Unknown".yellow());
+        }
+
+        // Use the handler to expand navigation and extract links
+        handler.expand_navigation(&page).await?;
 
         tokio::time::sleep(Duration::from_millis(2000)).await;
 
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {}", e))?;
-
-        let document = Html::parse_document(&content);
-
-        if !self.is_supported_documentation_site(&document) {
-            return Err(anyhow!("Not a supported documentation website (GitBook or Docusaurus)"));
-        }
-
-        let mut links = self.collect_links(&document);
+        let base_url = Url::parse(target_url)?;
+        let mut links = handler.extract_links(&page, &base_url).await?;
         debug!("Links collected: {:?}", links);
 
         // Apply page limit if specified
@@ -213,7 +217,7 @@ impl Downloader {
                     pdf_paths.push(out_path);
                 }
             } else {
-                if let Ok(path) = self.download_link(browser, target_url, href, index + 2).await {
+                if let Ok(path) = self.download_link(browser, target_url, href, index + 2, handler).await {
                     pdf_paths.push(path);
                 }
             }
@@ -430,100 +434,8 @@ impl Downloader {
         Ok(cover_path)
     }
 
-    async fn expand_menu_links(&self, page: &chromiumoxide::Page) -> Result<()> {
-        let js_code = r#"
-            (async () => {
-                // For old GitBook format - expand TOC menu items
-                const oldFormatElements = document
-                    .querySelectorAll('a[data-rnwrdesktop-fnigne="true"] > div[tabindex="0"]');
 
-                for (let element of oldFormatElements) {
-                    element.click();
-                }
-                
-                // For new GitBook format - look for expandable navigation items
-                const expandButtons = document.querySelectorAll([
-                    'button[aria-expanded="false"]',
-                    'button[data-state="closed"]',
-                    '[role="button"][aria-expanded="false"]'
-                ].join(', '));
-                
-                for (let button of expandButtons) {
-                    button.click();
-                }
-                
-                // For Docusaurus - expand collapsible sidebar categories
-                const docusaurusExpandables = document.querySelectorAll([
-                    '.menu__list-item--collapsed > .menu__link',
-                    '.menu__link--sublist[aria-expanded="false"]',
-                    'button.menu__link--sublist',
-                    '.theme-doc-sidebar-item-category button[aria-expanded="false"]',
-                    '.menu__caret', // Docusaurus v2 caret
-                    '[class*="collapsible"] button[aria-expanded="false"]'
-                ].join(', '));
-                
-                for (let item of docusaurusExpandables) {
-                    item.click();
-                }
-                
-                // Also try to click on category headers directly
-                const categoryHeaders = document.querySelectorAll('.menu__list-item--collapsed');
-                for (let header of categoryHeaders) {
-                    header.click();
-                }
-                
-                // Wait a bit for animations
-                await new Promise(r => setTimeout(r, 1000));
-            })();
-        "#;
-
-        page.evaluate(js_code)
-            .await
-            .map_err(|e| anyhow!("Failed to expand menu links: {}", e))?;
-
-        Ok(())
-    }
-
-    async fn prepare_page(&self, page: &chromiumoxide::Page) -> Result<()> {
-        let js_code = r#"
-            // Expand all expandable sections
-            const sectionsToExpand = document
-                .querySelectorAll('div[aria-controls^="expandable-body-"]');
-
-            for (let section of sectionsToExpand) {
-                section.click();
-            }
-
-            // Remove redundant/interactive elements
-            const itemSelectorsToRemove = [
-                'header + div[data-rnwrdesktop-hidden="true"]',
-                'div[aria-label^="Search"]',
-                'div[aria-label="Page actions"]',
-            ];
-            const itemsToRemove = document
-                .querySelectorAll(itemSelectorsToRemove.join(', '));
-
-            for (let item of itemsToRemove) {
-                item.remove();
-            }
-
-            // Turn relative timestamps into absolute ones
-            const lastModifiedEl = document
-                .querySelector('div[dir="auto"] > span[aria-label]');
-
-            if (lastModifiedEl) {
-                lastModifiedEl.innerText = lastModifiedEl.getAttribute('aria-label');
-            }
-        "#;
-
-        page.evaluate(js_code)
-            .await
-            .map_err(|e| anyhow!("Failed to prepare page: {}", e))?;
-
-        Ok(())
-    }
-
-    async fn download_link(&self, browser: &Browser, target_url: &str, href: &str, index: usize) -> Result<PathBuf> {
+    async fn download_link(&self, browser: &Browser, target_url: &str, href: &str, index: usize, handler: &dyn crate::FormatHandler) -> Result<PathBuf> {
         let slug = self.href_to_slug(href);
 
         if slug.is_empty() {
@@ -538,12 +450,12 @@ impl Downloader {
             .join(href)
             .map_err(|e| anyhow!("Failed to join URL: {}", e))?;
 
-        self.download_page(browser, &url, &out_path).await?;
+        self.download_page(browser, &url, &out_path, handler).await?;
 
         Ok(out_path)
     }
 
-    async fn download_page(&self, browser: &Browser, url: &Url, path: &Path) -> Result<()> {
+    async fn download_page(&self, browser: &Browser, url: &Url, path: &Path, handler: &dyn crate::FormatHandler) -> Result<()> {
         info!("Downloading \"{}\" into \"{}\"", url.to_string().green(), path.display().to_string().blue());
 
         let page = browser
@@ -565,7 +477,7 @@ impl Downloader {
                 .map_err(|e| anyhow!("Failed to create directory: {}", e))?;
         }
 
-        self.prepare_page(&page).await?;
+        handler.prepare_page(&page).await?;
 
         let params = PrintToPdfParams {
             scale: Some(self.pdf_options.scale),
@@ -588,110 +500,6 @@ impl Downloader {
         Ok(())
     }
 
-    fn is_supported_documentation_site(&self, document: &Html) -> bool {
-        // GitBook detection
-        let old_format_selector = Selector::parse("body > .gitbook-root").unwrap();
-        if document.select(&old_format_selector).next().is_some() {
-            return true;
-        }
-
-        let new_format_selectors = [
-            "body > div.scroll-nojump",
-            "nav[role=\"navigation\"]",
-            "a[href*=\"gitbook.io\"]",
-        ];
-
-        for selector_str in &new_format_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    return true;
-                }
-            }
-        }
-
-        let body_selector = Selector::parse("body").unwrap();
-        if let Some(body) = document.select(&body_selector).next() {
-            if let Some(class) = body.value().attr("class") {
-                if class.contains("theme-") {
-                    return true;
-                }
-            }
-        }
-
-        // Docusaurus detection
-        let docusaurus_selectors = [
-            "div#__docusaurus",
-            "div.docusaurus-root",
-            "nav.navbar--fixed-top",
-            "div.navbar__logo",
-            "script[src*=\"docusaurus\"]",
-        ];
-
-        for selector_str in &docusaurus_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    debug!("Detected Docusaurus site with selector: {}", selector_str);
-                    return true;
-                }
-            }
-        }
-
-        // Check for Docusaurus in script content
-        let script_selector = Selector::parse("script").unwrap();
-        for script in document.select(&script_selector) {
-            let content = script.text().collect::<String>();
-            if content.contains("docusaurus") || content.contains("__DOCUSAURUS__") {
-                debug!("Detected Docusaurus site from script content");
-                return true;
-            }
-        }
-
-        false
-    }
-
-    fn collect_links(&self, document: &Html) -> Vec<String> {
-        let mut links = Vec::new();
-        let mut seen = HashSet::new();
-        
-        // Prioritize navigation order - collect from sidebar/nav first
-        let nav_selectors = [
-            "nav.navbar a[href^=\"/\"]",  // Navbar links
-            "aside a[href^=\"/\"]",       // Sidebar links
-            ".menu a[href^=\"/\"]",       // Docusaurus menu
-            ".theme-doc-sidebar-menu a[href^=\"/\"]",  // Docusaurus sidebar
-            "nav a[href^=\"/\"]",         // General nav links
-        ];
-        
-        // Collect navigation links in order
-        for selector_str in &nav_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                for element in document.select(&selector) {
-                    if let Some(href) = element.value().attr("href") {
-                        if href.starts_with('/') && !href.contains('#') && !href.contains("/assets/") {
-                            if seen.insert(href.to_string()) {
-                                links.push(href.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Fallback: collect any remaining internal links
-        let internal_selector = Selector::parse("a[href^=\"/\"]").unwrap();
-        for element in document.select(&internal_selector) {
-            if let Some(href) = element.value().attr("href") {
-                if href.starts_with('/') && !href.contains('#') && !href.contains("/assets/") {
-                    if seen.insert(href.to_string()) {
-                        links.push(href.to_string());
-                    }
-                }
-            }
-        }
-        
-        debug!("Collected {} unique links in navigation order", links.len());
-        links
-    }
 
     fn href_to_slug(&self, href: &str) -> String {
         let mut slug = slugify(href);
