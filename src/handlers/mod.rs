@@ -119,6 +119,9 @@ impl HandlersRegistry {
         registry.register(Box::new(mkdocs::MkDocsHandler));
         registry.register(Box::new(mdbook_v03_v04::MdBookV03V04Handler));
         registry.register(Box::new(mdbook_v05::MdBookV05Handler));
+        registry.register(Box::new(vitepress_v1::VitePressV1Handler));
+        registry.register(Box::new(vitepress_v2::VitePressV2Handler));
+        registry.register(Box::new(vocs::VocsHandler));
         
         registry
     }
@@ -135,9 +138,15 @@ pub mod docusaurus;
 pub mod mkdocs;
 pub mod mdbook_v03_v04;
 pub mod mdbook_v05;
+pub mod vitepress_v1;
+pub mod vitepress_v2;
+pub mod vocs;
 
 pub use gitbook::GitBookHandler;
 pub use docusaurus::DocusaurusHandler;
 pub use mkdocs::MkDocsHandler;
 pub use mdbook_v03_v04::MdBookV03V04Handler;
 pub use mdbook_v05::MdBookV05Handler;
+pub use vitepress_v1::VitePressV1Handler;
+pub use vitepress_v2::VitePressV2Handler;
+pub use vocs::VocsHandler;
