@@ -64,10 +64,17 @@ Arguments:
   <URL>  URL of the website to scrape
 
 Options:
-  -o, --outDir <OUT_DIR>   Output directory used to save files [default: output_book2pdf]
+  -o, --outDir <OUT_DIR>   Output directory used to save files
+  -v, --verbose            Enable verbose output (debug level)
+  -d, --debug              Enable debug output (trace level)
       --no-combine         Don't combine PDFs into a single file (by default PDFs are combined)
   -p, --preserve-pages     Preserve individual page PDFs (by default they are deleted after combining)
-  -t, --timeout <TIMEOUT>  Request timeout in seconds [default: 30.0]
+  -q, --quiet              Enable quiet mode (errors only)
+  -c, --config <CONFIG>    Path to configuration file
+  -t, --timeout <TIMEOUT>  Request timeout in seconds
+      --pages <PAGES>      Limit the number of pages to download
+      --show-browser       Show browser window (headless by default)
+  -s, --simulate           Simulate mode - execute everything but don't actually download or create files
   -h, --help               Print help
 ```
 
@@ -79,10 +86,22 @@ Merge existing PDF files into a single document
 Usage: book2pdf merge [OPTIONS]
 
 Options:
-  -d, --dir <INPUT_DIR>       Directory containing PDF files to merge [default: output_book2pdf/pages]
+      --dir <INPUT_DIR>       Directory containing PDF files to merge [default: output/pages]
+  -v, --verbose               Enable verbose output (debug level)
+  -d, --debug                 Enable debug output (trace level)
   -o, --output <OUTPUT_FILE>  Output file path for the merged PDF [default: merged.pdf]
+  -q, --quiet                 Enable quiet mode (errors only)
+  -c, --config <CONFIG>       Path to configuration file
   -h, --help                  Print help
 ```
+
+## Configuration
+
+book2pdf supports configuration files in TOML format. Create a `book2pdf.toml` file in your project directory or `~/.config/book2pdf/config.toml` for global settings.
+
+See `book2pdf.toml.example` for all available options including browser settings, PDF formatting, logging levels, and more.
+
+Configuration precedence: CLI arguments > config file > defaults
 
 ## Examples
 
@@ -103,6 +122,31 @@ book2pdf download https://docs.example.com --preserve-pages
 
 # Don't combine - keep only individual page PDFs
 book2pdf download https://docs.example.com --no-combine
+```
+
+### Advanced Usage
+
+```bash
+# Simulate download without creating files (dry-run)
+book2pdf download https://docs.example.com --simulate
+
+# Limit to first 10 pages
+book2pdf download https://docs.example.com --pages 10
+
+# Show browser window (useful for debugging)
+book2pdf download https://docs.example.com --show-browser
+
+# Use configuration file
+book2pdf download https://docs.example.com --config my-config.toml
+
+# Enable verbose logging
+book2pdf download https://docs.example.com --verbose
+
+# Enable debug logging
+book2pdf download https://docs.example.com --debug
+
+# Quiet mode (errors only)
+book2pdf download https://docs.example.com --quiet
 ```
 
 ### Merge Existing PDFs
