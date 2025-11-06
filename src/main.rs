@@ -1,32 +1,48 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use colored::*;
-use book2pdf::{Downloader, PdfMerger};
+use book2pdf::{Downloader, PdfMerger, Config, HandlersRegistry};
 use std::path::PathBuf;
 use std::process;
-use tracing::{error, info};
+use tracing::error;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-use tokio::fs;
+
 
 #[derive(Parser)]
 #[command(name = "book2pdf")]
-#[command(about = "CLI utility to turn a published GitBook website into a collection of PDFs for offline reading")]
+#[command(about = "CLI utility to turn published documentation into PDFs for offline reading")]
 #[command(version = "0.1.0")]
 struct Args {
+    /// Enable verbose output (debug level)
+    #[arg(short = 'v', long = "verbose", global = true, conflicts_with_all = ["debug", "quiet"])]
+    verbose: bool,
+
+    /// Enable debug output (trace level)
+    #[arg(short = 'd', long = "debug", global = true, conflicts_with_all = ["verbose", "quiet"])]
+    debug: bool,
+
+    /// Enable quiet mode (errors only)
+    #[arg(short = 'q', long = "quiet", global = true, conflicts_with_all = ["verbose", "debug"])]
+    quiet: bool,
+
+    /// Path to configuration file
+    #[arg(short = 'c', long = "config", global = true)]
+    config: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Commands,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Download and convert documentation website to a combined PDF (default behavior)
+    /// Download and convert documentation websites into PDFs for offline reading
     Download {
-        /// URL of the website to scrape
-        url: String,
+        /// URL of the website to scrape (not required with --list)
+        #[arg(required_unless_present = "list")]
+        url: Option<String>,
 
         /// Output directory used to save files
-#[arg(short = 'o', long = "outDir", default_value = "output_book2pdf")]
-        out_dir: String,
+        #[arg(short = 'o', long = "out-dir")]
+        out_dir: Option<String>,
 
         /// Don't combine PDFs into a single file (by default PDFs are combined)
         #[arg(long = "no-combine")]
@@ -37,13 +53,32 @@ enum Commands {
         preserve_pages: bool,
 
         /// Request timeout in seconds
-        #[arg(short = 't', long = "timeout", default_value = "30.0", value_parser = parse_timeout)]
-        timeout: f64,
+        #[arg(short = 't', long = "timeout", value_parser = parse_timeout)]
+        timeout: Option<f64>,
+
+        /// Limit the number of pages to download
+        #[arg(long = "pages", value_parser = parse_pages)]
+        pages: Option<usize>,
+
+        /// Show browser window (headless by default)
+        #[arg(long = "show-browser")]
+        show_browser: bool,
+
+        /// Simulate mode - execute everything but don't actually download or create files
+        #[arg(long = "simulate", short = 's')]
+        simulate: bool,
+
+        /// List all supported formats and versions (no URL required)
+        #[arg(long = "list")]
+        list: bool,
     },
     /// Merge existing PDF files into a single document
+    ///
+    /// Useful for combining PDFs from 'download --no-combine' or creating
+    /// custom collections. Default directory contains pages from previous downloads.
     Merge {
         /// Directory containing PDF files to merge
-        #[arg(short = 'd', long = "dir", default_value = "output/pages")]
+        #[arg(long = "dir", default_value = "output/pages")]
         input_dir: String,
 
         /// Output file path for the merged PDF
@@ -60,86 +95,101 @@ fn parse_timeout(s: &str) -> Result<f64, String> {
     Ok(value)
 }
 
-async fn merge_pdfs(input_dir: &str, output_file: &str) -> Result<()> {
-    let input_path = PathBuf::from(input_dir);
-    
-    if !input_path.exists() {
-        return Err(anyhow::anyhow!("Input directory '{}' does not exist", input_dir));
+fn parse_pages(s: &str) -> Result<usize, String> {
+    let value = s.parse::<usize>().map_err(|_| "Not a valid number.")?;
+    if value == 0 {
+        return Err("Pages must be greater than 0.".to_string());
     }
-
-    info!("Scanning directory: {}", input_dir.green());
-    
-    let mut entries = fs::read_dir(&input_path).await?;
-    let mut pdf_files = Vec::new();
-    
-    while let Some(entry) = entries.next_entry().await? {
-        let path = entry.path();
-        if let Some(extension) = path.extension() {
-            if extension == "pdf" {
-                pdf_files.push(path);
-            }
-        }
-    }
-    
-    if pdf_files.is_empty() {
-        return Err(anyhow::anyhow!("No PDF files found in '{}'", input_dir));
-    }
-    
-    // Sort by filename to maintain order (especially numbered files)
-    pdf_files.sort();
-    
-    info!("Found {} PDF files to merge:", pdf_files.len());
-    for (i, path) in pdf_files.iter().enumerate() {
-        info!("  {}: {}", i + 1, path.file_name().unwrap().to_string_lossy().blue());
-    }
-    
-    let mut merger = PdfMerger::new();
-    
-    for pdf_path in &pdf_files {
-        info!("Adding: {}", pdf_path.display());
-        if let Err(e) = merger.add_pdf(pdf_path).await {
-            error!("Failed to add PDF {}: {}", pdf_path.display(), e);
-        }
-    }
-    
-    let output_path = PathBuf::from(output_file);
-    merger.save(&output_path).await?;
-    
-    info!("Successfully merged {} PDFs into: {}", 
-          pdf_files.len(), 
-          output_path.display().to_string().green());
-    
-    Ok(())
+    Ok(value)
 }
+
 
 #[tokio::main]
 async fn main() {
+    let args = Args::parse();
+
+    // Load configuration
+    let config = match Config::load(args.config.as_deref()) {
+        Ok(config) => config,
+        Err(e) => {
+            eprintln!("Failed to load config: {e}");
+            process::exit(1);
+        }
+    };
+
+    // Determine log level based on CLI flags (override config)
+    let (book2pdf_level, global_level) = if args.debug {
+        ("trace", "warn")
+    } else if args.verbose {
+        ("debug", "warn")
+    } else if args.quiet {
+        ("error", "error")
+    } else {
+        // Use config file value as default
+        match config.logging.level.as_str() {
+            "trace" => ("trace", "warn"),
+            "debug" => ("debug", "warn"),
+            "error" => ("error", "error"),
+            _ => ("info", "warn"),
+        }
+    };
+
     // Set up logging with chromiumoxide errors suppressed
     let filter = EnvFilter::from_default_env()
         .add_directive("chromiumoxide::conn=off".parse().unwrap())
         .add_directive("chromiumoxide::handler=off".parse().unwrap())
-        .add_directive("book2pdf=info".parse().unwrap());
+        .add_directive(format!("book2pdf={book2pdf_level}").parse().unwrap())
+        .add_directive(global_level.parse().unwrap());
     
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(filter)
         .init();
 
-    let args = Args::parse();
-
     let result = match args.command {
-        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout } => {
-            let combine = !no_combine; // Invert the logic: combine by default
-            let downloader = Downloader::new(out_dir, combine, preserve_pages, timeout);
-            downloader.run(&url).await
+        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout, pages, show_browser, simulate, list } => {
+            // Handle --list flag first
+            if list {
+                let registry = HandlersRegistry::default();
+                registry.list_supported_formats();
+                return;
+            }
+            
+            // URL is required for actual download
+            let url = match url {
+                Some(u) => u,
+                None => {
+                    eprintln!("Error: URL is required for download operation");
+                    process::exit(1);
+                }
+            };
+            
+            // Use CLI args or fallback to config values
+            let output_dir = out_dir.unwrap_or(config.output.folder.clone());
+            let combine = if no_combine { false } else { config.output.combine_pdfs };
+            let preserve = if preserve_pages { true } else { config.output.preserve_pages };
+            let timeout_val = timeout.unwrap_or(config.browser.timeout);
+            let show_window = if show_browser { true } else { config.browser.show_window };
+            
+            // Debug logging to verify values
+            tracing::debug!("Using output_dir: {}", output_dir);
+            tracing::debug!("Using timeout: {}", timeout_val);
+            tracing::debug!("Using combine: {}", combine);
+            tracing::debug!("Using show_window: {}", show_window);
+            tracing::debug!("Using simulate: {}", simulate);
+            
+            let downloader = Downloader::new(output_dir, combine, preserve, timeout_val)
+                .with_pdf_config(&config.pdf);
+            let simulate_mode = simulate || config.scraping.simulate;
+            downloader.run(&url, pages.or(config.scraping.page_limit), show_window, simulate_mode).await
         }
         Commands::Merge { input_dir, output_file } => {
-            merge_pdfs(&input_dir, &output_file).await
+            PdfMerger::merge_directory(&input_dir, &output_file).await
         }
     };
 
     if let Err(e) = result {
-        error!("{}", format!("Error: {}", e).red());
+        error!("{}", &format!("Error: {e}"));
         process::exit(1);
     }
 }

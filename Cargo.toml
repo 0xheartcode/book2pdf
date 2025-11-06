@@ -2,9 +2,12 @@
 name = "book2pdf"
 version = "0.1.0"
 edition = "2021"
-description = "CLI utility to turn published documentation websites into PDFs"
+description = "CLI utility to turn published code documentation into PDFs"
 authors = ["0xheartcode <0xheartcode@gmail.com>"]
 license = "MIT"
+repository = "https://github.com/0xheartcode/book2pdf"
+keywords = ["scraper", "pdf", "web", "documentation", "gitbook"]
+categories = ["command-line-utilities", "multimedia", "text-processing"]
 
 [dependencies]
 chromiumoxide = "0.7"
@@ -14,13 +17,15 @@ clap = { version = "4.5", features = ["derive"] }
 tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-colored = "2.1"
 slug = "0.1"
 anyhow = "1.0"
 url = "2.5"
+async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 futures-util = "0.3"
+toml = "0.9.8"
+dirs = "5.0"
 
 [[bin]]
 name = "book2pdf"

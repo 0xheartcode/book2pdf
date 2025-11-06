@@ -18,6 +18,10 @@
 
 mod downloader;
 mod pdf_merger;
+pub mod config;
+pub mod handlers;
 
 pub use downloader::Downloader;
 pub use pdf_merger::PdfMerger;
+pub use config::Config;
+pub use handlers::{HandlersRegistry, FormatHandler, SiteDetector, ConfidenceLevel};

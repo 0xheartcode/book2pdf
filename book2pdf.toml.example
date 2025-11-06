@@ -1,0 +1,30 @@
+# book2pdf Configuration File
+# Copy this file to book2pdf.toml in your project directory or ~/.config/book2pdf/config.toml
+
+[output]
+folder = "output_book2pdf"          # Default output directory
+filename = "combined.pdf"           # Default combined PDF name (auto-generated if not set)
+combine_pdfs = true                 # Default: combine PDFs into single file
+preserve_pages = false              # Default: delete individual pages after combining
+
+[browser]
+show_window = false                 # Default: run headless
+timeout = 30.0                      # Default: 30 second timeout
+window_width = 1920                 # Default: 1920px browser width
+window_height = 1080                # Default: 1080px browser height
+
+[pdf]
+scale = 0.75                        # Default: 75% scale factor
+margin_top = 0.0                    # Default: 0 inch top margin
+margin_right = 0.0                  # Default: 0 inch right margin  
+margin_bottom = 0.0                 # Default: 0 inch bottom margin
+margin_left = 0.0                   # Default: 0 inch left margin
+
+[scraping]
+# page_limit = 10                   # Default: no page limit (download all) - comment out for unlimited
+supported_sites = ["gitbook", "docusaurus"]  # Default supported platforms
+simulate = false                    # Default: false - set to true for dry-run mode
+
+[logging]
+level = "info"                      # Default: info level (options: error, info, debug, trace)
+suppress_browser_logs = true        # Default: hide chromium logs

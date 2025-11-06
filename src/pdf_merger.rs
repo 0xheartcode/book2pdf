@@ -1,8 +1,9 @@
 use anyhow::{anyhow, Result};
 use lopdf::{Document, Object};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::{debug, info};
+
 
 pub struct PdfMerger {
     documents: Vec<(String, Document)>,
@@ -31,6 +32,59 @@ impl PdfMerger {
         debug!("Loaded PDF with {} pages from {}", document.get_pages().len(), path.display());
         self.documents.push((filename, document));
 
+        Ok(())
+    }
+
+    /// Merge all PDF files from a directory into a single PDF
+    pub async fn merge_directory(input_dir: &str, output_file: &str) -> Result<()> {
+        let input_path = PathBuf::from(input_dir);
+        
+        if !input_path.exists() {
+            return Err(anyhow!("Input directory '{input_dir}' does not exist"));
+        }
+
+        info!("Scanning directory: {}", input_dir);
+        
+        let mut entries = fs::read_dir(&input_path).await?;
+        let mut pdf_files = Vec::new();
+        
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if let Some(extension) = path.extension() {
+                if extension == "pdf" {
+                    pdf_files.push(path);
+                }
+            }
+        }
+        
+        if pdf_files.is_empty() {
+            return Err(anyhow!("No PDF files found in '{input_dir}'"));
+        }
+        
+        // Sort by filename to maintain order (especially numbered files)
+        pdf_files.sort();
+        
+        info!("Found {} PDF files to merge:", pdf_files.len());
+        for (i, path) in pdf_files.iter().enumerate() {
+            info!("  {}: {}", i + 1, &path.file_name().unwrap().to_string_lossy());
+        }
+        
+        let mut merger = PdfMerger::new();
+        
+        for pdf_path in &pdf_files {
+            info!("Adding: {}", pdf_path.display());
+            if let Err(e) = merger.add_pdf(pdf_path).await {
+                tracing::error!("Failed to add PDF {}: {}", pdf_path.display(), e);
+            }
+        }
+        
+        let output_path = PathBuf::from(output_file);
+        merger.save(&output_path).await?;
+        
+        info!("Successfully merged {} PDFs into: {}", 
+              pdf_files.len(), 
+              &output_path.display().to_string());
+        
         Ok(())
     }
 
@@ -90,10 +144,8 @@ impl PdfMerger {
 
         // Update the Pages object to reference all pages
         if let Ok(catalog) = merged_doc.catalog() {
-            if let Ok(pages_ref) = catalog.get(b"Pages") {
-                if let Object::Reference(pages_id) = pages_ref {
-                    if let Ok(pages_obj) = merged_doc.get_object_mut(*pages_id) {
-                        if let Object::Dictionary(ref mut pages_dict) = pages_obj {
+            if let Ok(Object::Reference(pages_id)) = catalog.get(b"Pages") {
+                if let Ok(Object::Dictionary(ref mut pages_dict)) = merged_doc.get_object_mut(*pages_id) {
                             // Update the Kids array with all page references
                             pages_dict.set("Kids", Object::Array(
                                 all_page_ids.into_iter().map(Object::Reference).collect()
@@ -105,8 +157,6 @@ impl PdfMerger {
                                 pages_dict.set("Count", Object::Integer(kids_len as i64));
                                 debug!("Updated Pages object with {} kids", kids_len);
                             }
-                        }
-                    }
                 }
             }
         }
@@ -115,14 +165,10 @@ impl PdfMerger {
         merged_doc.max_id = max_id;
 
         let final_page_count = if let Ok(catalog) = merged_doc.catalog() {
-            if let Ok(pages_ref) = catalog.get(b"Pages") {
-                if let Object::Reference(pages_id) = pages_ref {
-                    if let Ok(pages_obj) = merged_doc.get_object(*pages_id) {
-                        if let Object::Dictionary(ref pages_dict) = pages_obj {
-                            if let Ok(Object::Integer(count)) = pages_dict.get(b"Count") {
-                                *count
-                            } else { 0 }
-                        } else { 0 }
+            if let Ok(Object::Reference(pages_id)) = catalog.get(b"Pages") {
+                if let Ok(Object::Dictionary(ref pages_dict)) = merged_doc.get_object(*pages_id) {
+                    if let Ok(Object::Integer(count)) = pages_dict.get(b"Count") {
+                        *count
                     } else { 0 }
                 } else { 0 }
             } else { 0 }
@@ -134,7 +180,7 @@ impl PdfMerger {
         let mut data = Vec::new();
         merged_doc
             .save_to(&mut data)
-            .map_err(|e| anyhow!("Failed to serialize merged PDF: {}", e))?;
+            .map_err(|e| anyhow!("Failed to serialize merged PDF: {e}"))?;
 
         fs::write(output_path, data)
             .await
