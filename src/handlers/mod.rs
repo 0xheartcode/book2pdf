@@ -117,6 +117,8 @@ impl HandlersRegistry {
         registry.register(Box::new(gitbook::GitBookHandler));
         registry.register(Box::new(docusaurus::DocusaurusHandler));
         registry.register(Box::new(mkdocs::MkDocsHandler));
+        registry.register(Box::new(mdbook_v03_v04::MdBookV03V04Handler));
+        registry.register(Box::new(mdbook_v05::MdBookV05Handler));
         
         registry
     }
@@ -131,7 +133,11 @@ impl Default for HandlersRegistry {
 pub mod gitbook;
 pub mod docusaurus;
 pub mod mkdocs;
+pub mod mdbook_v03_v04;
+pub mod mdbook_v05;
 
 pub use gitbook::GitBookHandler;
 pub use docusaurus::DocusaurusHandler;
 pub use mkdocs::MkDocsHandler;
+pub use mdbook_v03_v04::MdBookV03V04Handler;
+pub use mdbook_v05::MdBookV05Handler;

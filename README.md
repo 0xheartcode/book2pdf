@@ -29,6 +29,11 @@ book2pdf automatically detects and supports the following documentation platform
 - **Format**: mkdocs
 - **Auto-detection**: Supports multiple MkDocs themes with automatic theme detection
 
+### mdBook
+- **Versions**: All versions (theme-agnostic)
+- **Format**: mdbook
+- **Auto-detection**: Detects mdBook generator meta tag and sidebar structure
+
 To see all supported formats, run:
 ```bash
 cargo run -- download --list
