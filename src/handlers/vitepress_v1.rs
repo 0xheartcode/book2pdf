@@ -6,19 +6,15 @@ use tracing::debug;
 use url::Url;
 
 use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
+use crate::handlers::utils;
 
 /// Handler for VitePress v1.x documentation sites
 pub struct VitePressV1Handler;
 
 #[async_trait]
 impl SiteDetector for VitePressV1Handler {
-    async fn can_handle(&self, _url: &str, page: &Page) -> Result<ConfidenceLevel> {
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
-        let document = Html::parse_document(&content);
+    async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
+        let document = Html::parse_document(content);
         
         // Check for VitePress indicators
         let has_vitepress_comment = content.contains("VitePress") || 
@@ -49,26 +45,10 @@ impl SiteDetector for VitePressV1Handler {
             ".VPDoc"
         ];
         
-        let mut v1_matches = 0;
-        let mut v2_matches = 0;
+        let v1_matches = utils::count_matching_selectors(&document, &v1_selectors);
+        let v2_matches = utils::count_matching_selectors(&document, &v2_selectors);
         
-        for selector_str in &v1_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    v1_matches += 1;
-                    debug!("Found VitePress v1.x selector: {}", selector_str);
-                }
-            }
-        }
-        
-        for selector_str in &v2_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    v2_matches += 1;
-                    debug!("Found VitePress v2.x selector (negative for this handler): {}", selector_str);
-                }
-            }
-        }
+        debug!("Found {} VitePress v1.x selectors, {} v2.x selectors", v1_matches, v2_matches);
         
         // High confidence if we have v1.x elements AND no v2.x elements
         if v2_matches == 0 && v1_matches >= 3 {

@@ -17,7 +17,7 @@ pub enum ConfidenceLevel {
 #[async_trait]
 pub trait SiteDetector: Send + Sync {
     /// Check if this detector can handle the given URL and page content
-    async fn can_handle(&self, url: &str, page: &Page) -> Result<ConfidenceLevel>;
+    async fn can_handle(&self, url: &str, content: &str) -> Result<ConfidenceLevel>;
     
     /// Get the version identifier for this handler
     fn version(&self) -> &str;
@@ -68,15 +68,26 @@ impl HandlersRegistry {
     
     /// Detect the best format handler for the given URL and page
     pub async fn detect_format(&self, url: &str, page: &Page) -> Result<Option<&dyn FormatHandler>> {
+        // Get HTML content once and reuse for all handlers
+        let content = page
+            .content()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to get page content: {e}"))?;
+        
         let mut best_handler: Option<&dyn FormatHandler> = None;
         let mut best_confidence = ConfidenceLevel::None;
         
         for handler in &self.handlers {
-            match handler.can_handle(url, page).await {
+            match handler.can_handle(url, &content).await {
                 Ok(confidence) => {
                     if confidence > best_confidence {
                         best_confidence = confidence;
                         best_handler = Some(handler.as_ref());
+                        
+                        // Early exit for certain matches - no need to check remaining handlers
+                        if confidence == ConfidenceLevel::Certain {
+                            return Ok(best_handler);
+                        }
                     }
                 }
                 Err(e) => {
@@ -122,6 +133,9 @@ impl HandlersRegistry {
         registry.register(Box::new(vitepress_v1::VitePressV1Handler));
         registry.register(Box::new(vitepress_v2::VitePressV2Handler));
         registry.register(Box::new(vocs::VocsHandler));
+        registry.register(Box::new(starlight::StarlightHandler));
+        registry.register(Box::new(nextra::NextraHandler));
+        registry.register(Box::new(sphinx::SphinxHandler));
         
         registry
     }
@@ -133,6 +147,7 @@ impl Default for HandlersRegistry {
     }
 }
 
+pub mod utils;
 pub mod gitbook;
 pub mod docusaurus;
 pub mod mkdocs;
@@ -141,6 +156,9 @@ pub mod mdbook_v05;
 pub mod vitepress_v1;
 pub mod vitepress_v2;
 pub mod vocs;
+pub mod starlight;
+pub mod nextra;
+pub mod sphinx;
 
 pub use gitbook::GitBookHandler;
 pub use docusaurus::DocusaurusHandler;
@@ -150,3 +168,6 @@ pub use mdbook_v05::MdBookV05Handler;
 pub use vitepress_v1::VitePressV1Handler;
 pub use vitepress_v2::VitePressV2Handler;
 pub use vocs::VocsHandler;
+pub use starlight::StarlightHandler;
+pub use nextra::NextraHandler;
+pub use sphinx::SphinxHandler;

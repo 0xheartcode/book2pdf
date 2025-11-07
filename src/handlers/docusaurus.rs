@@ -7,19 +7,15 @@ use tracing::debug;
 use url::Url;
 
 use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
+use crate::handlers::utils;
 
 /// Handler for Docusaurus documentation sites
 pub struct DocusaurusHandler;
 
 #[async_trait]
 impl SiteDetector for DocusaurusHandler {
-    async fn can_handle(&self, _url: &str, page: &Page) -> Result<ConfidenceLevel> {
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
-        let document = Html::parse_document(&content);
+    async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
+        let document = Html::parse_document(content);
         
         // Check for Docusaurus-specific elements
         let docusaurus_selectors = [
@@ -30,24 +26,16 @@ impl SiteDetector for DocusaurusHandler {
             "script[src*=\"docusaurus\"]",
         ];
         
-        for selector_str in &docusaurus_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    debug!("Detected Docusaurus site with selector: {}", selector_str);
-                    return Ok(ConfidenceLevel::Certain);
-                }
-            }
+        if utils::has_any_css_selectors(&document, &docusaurus_selectors) {
+            debug!("Detected Docusaurus site with CSS selectors");
+            return Ok(ConfidenceLevel::Certain);
         }
         
         // Check for Docusaurus in script content
-        let script_selector = Selector::parse("script")
-            .map_err(|e| anyhow!("Invalid selector: {e}"))?;
-        for script in document.select(&script_selector) {
-            let content = script.text().collect::<String>();
-            if content.contains("docusaurus") || content.contains("__DOCUSAURUS__") {
-                debug!("Detected Docusaurus site from script content");
-                return Ok(ConfidenceLevel::High);
-            }
+        let docusaurus_script_keywords = ["docusaurus", "__DOCUSAURUS__"];
+        if utils::has_script_keywords(&document, &docusaurus_script_keywords) {
+            debug!("Detected Docusaurus site from script content");
+            return Ok(ConfidenceLevel::High);
         }
         
         Ok(ConfidenceLevel::None)

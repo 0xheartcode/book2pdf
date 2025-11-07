@@ -4,6 +4,12 @@ A CLI utility to convert documentation websites into PDF files for offline readi
 
 **⚠️ Clunky Alpha Software** - Basic functionality works but expect stability issues.
 Documentations with multiple pages may take up all your ram 🤯. Be safe.
+
+## Issues
+
+In case a specific website does not scrape correctly, please create an issue or a PR (if you're inclined).
+Either way it will be tested and fixed. This is all early so expect lots of changes.
+
 ## Requirements
 
 - **Rust 1.70+** - [Install Rust](https://rustup.rs/)
@@ -43,6 +49,21 @@ book2pdf automatically detects and supports the following documentation platform
 - **Versions**: v1.x+
 - **Format**: vocs
 - **Auto-detection**: Detects vocs data-vocs attribute and CSS classes
+
+### Starlight
+- **Versions**: v0.x
+- **Format**: starlight  
+- **Auto-detection**: Detects Starlight CSS layers and Astro-based components
+
+### Sphinx
+- **Versions**: v5.x, v6.x, v7.x, v8.x
+- **Format**: sphinx
+- **Auto-detection**: Detects Sphinx generator meta tags, themes (ReadTheDocs, Furo, PyData, Jupyter Book), and navigation patterns
+
+### Nextra
+- **Versions**: v2.x, v3.x, v4.x
+- **Format**: nextra
+- **Auto-detection**: Detects Next.js with Nextra CSS variables, MDX patterns, and framework-specific classes
 
 To see all supported formats, run:
 ```bash

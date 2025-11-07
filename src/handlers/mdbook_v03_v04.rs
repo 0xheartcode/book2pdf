@@ -6,19 +6,15 @@ use tracing::debug;
 use url::Url;
 
 use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
+use crate::handlers::utils;
 
 /// Handler for mdBook v0.3.x - v0.4.x documentation sites
 pub struct MdBookV03V04Handler;
 
 #[async_trait]
 impl SiteDetector for MdBookV03V04Handler {
-    async fn can_handle(&self, _url: &str, page: &Page) -> Result<ConfidenceLevel> {
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
-        let document = Html::parse_document(&content);
+    async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
+        let document = Html::parse_document(content);
         
         // Must have mdBook comment
         if !content.contains("Book generated using mdBook") {
@@ -42,26 +38,10 @@ impl SiteDetector for MdBookV03V04Handler {
             "#mdbook-content"
         ];
         
-        let mut v03_v04_matches = 0;
-        let mut v05_matches = 0;
+        let v03_v04_matches = utils::count_matching_selectors(&document, &v03_v04_selectors);
+        let v05_matches = utils::count_matching_selectors(&document, &v05_selectors);
         
-        for selector_str in &v03_v04_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    v03_v04_matches += 1;
-                    debug!("Found v0.3-v0.4 selector: {}", selector_str);
-                }
-            }
-        }
-        
-        for selector_str in &v05_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    v05_matches += 1;
-                    debug!("Found v0.5+ selector (negative for this handler): {}", selector_str);
-                }
-            }
-        }
+        debug!("Found {} v0.3-v0.4 selectors, {} v0.5+ selectors", v03_v04_matches, v05_matches);
         
         // High confidence if we have v0.3-v0.4 elements AND no v0.5+ elements
         if v05_matches == 0 && v03_v04_matches >= 3 {
