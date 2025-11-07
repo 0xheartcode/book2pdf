@@ -12,13 +12,8 @@ pub struct MdBookV05Handler;
 
 #[async_trait]
 impl SiteDetector for MdBookV05Handler {
-    async fn can_handle(&self, _url: &str, page: &Page) -> Result<ConfidenceLevel> {
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
-        let document = Html::parse_document(&content);
+    async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
+        let document = Html::parse_document(content);
         
         // Must have mdBook comment
         if !content.contains("Book generated using mdBook") {

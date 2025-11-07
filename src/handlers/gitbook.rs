@@ -13,13 +13,8 @@ pub struct GitBookHandler;
 
 #[async_trait]
 impl SiteDetector for GitBookHandler {
-    async fn can_handle(&self, _url: &str, page: &Page) -> Result<ConfidenceLevel> {
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
-        let document = Html::parse_document(&content);
+    async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
+        let document = Html::parse_document(content);
         
         // Check for old GitBook format
         let old_format_selector = Selector::parse("body > .gitbook-root")

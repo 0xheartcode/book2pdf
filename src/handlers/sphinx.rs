@@ -7,6 +7,7 @@ use tracing::debug;
 use url::Url;
 
 use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
+use crate::handlers::utils;
 
 /// Handler for Sphinx documentation sites (including Jupyter Book, ReadTheDocs themes, etc.)
 pub struct SphinxHandler;
@@ -21,29 +22,27 @@ impl SiteDetector for SphinxHandler {
         "sphinx"
     }
     
-    async fn can_handle(&self, _url: &str, page: &Page) -> Result<ConfidenceLevel> {
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
-        let document = Html::parse_document(&content);
+    async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
+        let document = Html::parse_document(content);
         
         // Primary Sphinx detection patterns
-        let has_sphinx_meta = document.select(&Selector::parse(r#"meta[name="generator"]"#).unwrap())
-            .any(|element| {
-                if let Some(generator_content) = element.value().attr("content") {
-                    generator_content.to_lowercase().contains("sphinx")
-                } else {
-                    false
-                }
-            });
+        let has_sphinx_meta = utils::has_meta_generator(&document, "sphinx");
         
         // Check for Sphinx-specific text patterns
-        let has_sphinx_footer = content.contains("Built with") && content.contains("Sphinx") ||
-                               content.contains("Made with") && content.contains("Sphinx") ||
-                               content.contains("Created using Sphinx") ||
-                               content.contains("sphinx-doc.org");
+        let sphinx_footer_patterns = [
+            ("Built with", "Sphinx"),
+            ("Made with", "Sphinx"), 
+            ("Created using Sphinx", ""),
+            ("sphinx-doc.org", "")
+        ];
+        
+        let has_sphinx_footer = sphinx_footer_patterns.iter().any(|(pattern1, pattern2)| {
+            if pattern2.is_empty() {
+                content.contains(pattern1)
+            } else {
+                utils::contains_all_keywords(content, &[pattern1, pattern2])
+            }
+        });
         
         // Check for common Sphinx themes and patterns
         let sphinx_indicators = [
@@ -73,13 +72,8 @@ impl SiteDetector for SphinxHandler {
             "bodywrapper"                // Sphinx body wrapper
         ];
         
-        let mut sphinx_matches = 0;
-        for indicator in &sphinx_indicators {
-            if content.contains(indicator) {
-                sphinx_matches += 1;
-                debug!("Found Sphinx indicator: {}", indicator);
-            }
-        }
+        let sphinx_matches = utils::count_text_indicators(content, &sphinx_indicators);
+        debug!("Found {} Sphinx text indicators", sphinx_matches);
         
         // Check for Sphinx-specific CSS classes and IDs
         let sphinx_selectors = [
@@ -98,25 +92,18 @@ impl SiteDetector for SphinxHandler {
             ".ethical-ad"                // ReadTheDocs ethical ads
         ];
         
-        let mut css_matches = 0;
-        for selector_str in &sphinx_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    css_matches += 1;
-                    debug!("Found Sphinx CSS selector: {}", selector_str);
-                }
-            }
-        }
+        let css_matches = sphinx_selectors.iter()
+            .filter(|&selector_str| utils::has_css_selector(&document, selector_str))
+            .count();
+        debug!("Found {} Sphinx CSS selectors", css_matches);
         
         // Check for Jupyter Book specific patterns
-        let is_jupyter_book = content.contains("thebe") || 
-                             content.contains("jupyter-book") ||
-                             content.contains("executable-book");
+        let jupyter_book_keywords = ["thebe", "jupyter-book", "executable-book"];
+        let is_jupyter_book = utils::contains_any_keywords(content, &jupyter_book_keywords);
         
         // Check for ReadTheDocs hosting
-        let is_readthedocs = content.contains("readthedocs.io") ||
-                            content.contains("Read the Docs") ||
-                            content.contains("rtd-footer-container");
+        let readthedocs_keywords = ["readthedocs.io", "Read the Docs", "rtd-footer-container"];
+        let is_readthedocs = utils::contains_any_keywords(content, &readthedocs_keywords);
         
         // Confidence logic
         if has_sphinx_meta && (sphinx_matches >= 3 || css_matches >= 2) {
@@ -154,20 +141,22 @@ impl FormatHandler for SphinxHandler {
         // Try to extract Sphinx version from meta generator tag
         let document = Html::parse_document(&content);
         
-        if let Some(meta) = document.select(&Selector::parse(r#"meta[name="generator"]"#).unwrap()).next() {
-            if let Some(generator_content) = meta.value().attr("content") {
-                if generator_content.to_lowercase().contains("sphinx") {
-                    // Try to extract version (e.g., "Sphinx 4.5.0")
-                    if let Some(version_start) = generator_content.find(char::is_numeric) {
-                        if let Some(version_part) = generator_content.get(version_start..) {
-                            if let Some(space_pos) = version_part.find(' ') {
-                                return Ok(Some(format!("v{}", &version_part[..space_pos])));
-                            } else if let Some(end_pos) = version_part.find(|c: char| !c.is_ascii_alphanumeric() && c != '.') {
-                                return Ok(Some(format!("v{}", &version_part[..end_pos])));
+        if let Ok(selector) = Selector::parse(r#"meta[name="generator"]"#) {
+            if let Some(meta) = document.select(&selector).next() {
+                if let Some(generator_content) = meta.value().attr("content") {
+                    if generator_content.to_lowercase().contains("sphinx") {
+                        // Try to extract version (e.g., "Sphinx 4.5.0")
+                        if let Some(version_start) = generator_content.find(char::is_numeric) {
+                            if let Some(version_part) = generator_content.get(version_start..) {
+                                if let Some(space_pos) = version_part.find(' ') {
+                                    return Ok(Some(format!("v{}", &version_part[..space_pos])));
+                                } else if let Some(end_pos) = version_part.find(|c: char| !c.is_ascii_alphanumeric() && c != '.') {
+                                    return Ok(Some(format!("v{}", &version_part[..end_pos])));
+                                }
                             }
                         }
+                        return Ok(Some("Sphinx".to_string()));
                     }
-                    return Ok(Some("Sphinx".to_string()));
                 }
             }
         }

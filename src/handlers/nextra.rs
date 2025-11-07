@@ -7,6 +7,7 @@ use tracing::debug;
 use url::Url;
 
 use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
+use crate::handlers::utils;
 
 /// Handler for Nextra documentation sites (Next.js-based documentation framework)
 pub struct NextraHandler;
@@ -21,33 +22,14 @@ impl SiteDetector for NextraHandler {
         "nextra"
     }
     
-    async fn can_handle(&self, _url: &str, page: &Page) -> Result<ConfidenceLevel> {
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
-        let document = Html::parse_document(&content);
+    async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
+        let document = Html::parse_document(content);
         
         // Primary Nextra detection patterns
-        let has_nextra_meta = document.select(&Selector::parse(r#"meta[name="generator"]"#).unwrap())
-            .any(|element| {
-                if let Some(generator_content) = element.value().attr("content") {
-                    generator_content.to_lowercase().contains("nextra")
-                } else {
-                    false
-                }
-            });
+        let has_nextra_meta = utils::has_meta_generator(&document, "nextra");
         
         // Check for Next.js with Nextra-specific patterns
-        let has_nextjs_meta = document.select(&Selector::parse(r#"meta[name="generator"]"#).unwrap())
-            .any(|element| {
-                if let Some(generator_content) = element.value().attr("content") {
-                    generator_content.contains("Next.js")
-                } else {
-                    false
-                }
-            });
+        let has_nextjs_meta = utils::has_meta_generator(&document, "Next.js");
         
         // Nextra-specific CSS patterns and classes
         let nextra_indicators = [
@@ -94,13 +76,8 @@ impl SiteDetector for NextraHandler {
             "pagefind"
         ];
         
-        let mut nextra_matches = 0;
-        for indicator in &nextra_indicators {
-            if content.contains(indicator) {
-                nextra_matches += 1;
-                debug!("Found Nextra indicator: {}", indicator);
-            }
-        }
+        let nextra_matches = utils::count_text_indicators(content, &nextra_indicators);
+        debug!("Found {} Nextra text indicators", nextra_matches);
         
         // Check for Nextra-specific CSS selectors and structural patterns
         let nextra_selectors = [
@@ -122,15 +99,10 @@ impl SiteDetector for NextraHandler {
             ".nextra-search",             // Search functionality
         ];
         
-        let mut css_matches = 0;
-        for selector_str in &nextra_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    css_matches += 1;
-                    debug!("Found Nextra CSS selector: {}", selector_str);
-                }
-            }
-        }
+        let css_matches = nextra_selectors.iter()
+            .filter(|&selector_str| utils::has_css_selector(&document, selector_str))
+            .count();
+        debug!("Found {} Nextra CSS selectors", css_matches);
         
         // Detect specific Nextra themes
         let has_docs_theme = content.contains("nextra-theme-docs") || 
@@ -213,9 +185,11 @@ impl FormatHandler for NextraHandler {
         if content.contains("Next.js") {
             // Try to extract Next.js version which can indicate Nextra version
             let document = Html::parse_document(&content);
-            if let Some(meta) = document.select(&Selector::parse(r#"meta[name="generator"]"#).unwrap()).next() {
-                if let Some(generator_content) = meta.value().attr("content") {
-                    return Ok(Some(format!("Nextra ({})", generator_content)));
+            if let Ok(selector) = Selector::parse(r#"meta[name="generator"]"#) {
+                if let Some(meta) = document.select(&selector).next() {
+                    if let Some(generator_content) = meta.value().attr("content") {
+                        return Ok(Some(format!("Nextra ({})", generator_content)));
+                    }
                 }
             }
         }

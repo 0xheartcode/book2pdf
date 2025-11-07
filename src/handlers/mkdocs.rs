@@ -13,11 +13,7 @@ pub struct MkDocsHandler;
 
 #[async_trait]
 impl SiteDetector for MkDocsHandler {
-    async fn can_handle(&self, _url: &str, page: &Page) -> Result<ConfidenceLevel> {
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
+    async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
         
         // High confidence - explicit MkDocs mentions
         if content.contains("Material for MkDocs") || content.contains("Made with Material for MkDocs") {
@@ -184,7 +180,7 @@ impl FormatHandler for MkDocsHandler {
                 if let Some(version_start) = content[start..start + 50].find("-") {
                     if let Some(version_end) = content[start + version_start + 1..start + version_start + 20].find(&['"', '\'', ' '][..]) {
                         let version = &content[start + version_start + 1..start + version_start + 1 + version_end];
-                        if !version.is_empty() && version.chars().next().unwrap().is_ascii_digit() {
+                        if !version.is_empty() && version.chars().next().map_or(false, |c| c.is_ascii_digit()) {
                             return Ok(Some(format!("Material v{version}")));
                         }
                     }

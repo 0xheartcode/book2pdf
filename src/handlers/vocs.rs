@@ -6,24 +6,20 @@ use tracing::debug;
 use url::Url;
 
 use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
+use crate::handlers::utils;
 
 /// Handler for vocs documentation sites
 pub struct VocsHandler;
 
 #[async_trait]
 impl SiteDetector for VocsHandler {
-    async fn can_handle(&self, _url: &str, page: &Page) -> Result<ConfidenceLevel> {
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
-        let document = Html::parse_document(&content);
+    async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
+        let document = Html::parse_document(content);
         
         // Primary vocs detection: data-vocs attribute on html element
         let has_data_vocs = content.contains("data-vocs") ||
                            content.contains("html data-vocs") ||
-                           document.select(&Selector::parse("html[data-vocs]").unwrap()).next().is_some();
+                           utils::has_css_selector(&document, "html[data-vocs]");
         
         // Check for vocs-specific CSS class patterns
         let vocs_selectors = [

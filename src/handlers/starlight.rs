@@ -7,6 +7,7 @@ use tracing::debug;
 use url::Url;
 
 use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
+use crate::handlers::utils;
 
 /// Handler for Starlight (Astro-based) documentation sites
 pub struct StarlightHandler;
@@ -20,13 +21,8 @@ impl SiteDetector for StarlightHandler {
     fn format_name(&self) -> &str {
         "starlight"
     }
-    async fn can_handle(&self, _url: &str, page: &Page) -> Result<ConfidenceLevel> {
-        let content = page
-            .content()
-            .await
-            .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
-        let document = Html::parse_document(&content);
+    async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
+        let document = Html::parse_document(content);
         
         // Primary Starlight detection patterns
         let has_starlight_css = content.contains("@layer starlight") ||
@@ -60,16 +56,9 @@ impl SiteDetector for StarlightHandler {
             }
         }
         
-        // Check for Starlight meta patterns
-        let has_starlight_meta = document.select(&Selector::parse(r#"meta[name="generator"]"#).unwrap())
-            .any(|element| {
-                if let Some(content) = element.value().attr("content") {
-                    content.to_lowercase().contains("astro") || 
-                    content.to_lowercase().contains("starlight")
-                } else {
-                    false
-                }
-            });
+        // Check for Starlight meta patterns  
+        let has_astro_meta = utils::has_meta_generator(&document, "astro");
+        let has_starlight_meta = utils::has_meta_generator(&document, "starlight");
         
         // Check for CSS variables with --sl- prefix
         let has_starlight_vars = content.contains("--sl-") ||
@@ -80,9 +69,9 @@ impl SiteDetector for StarlightHandler {
             Ok(ConfidenceLevel::Certain)
         } else if (has_starlight_css || has_starlight_js) && starlight_class_matches >= 1 {
             Ok(ConfidenceLevel::High)
-        } else if starlight_class_matches >= 3 && (has_starlight_meta || has_starlight_vars) {
+        } else if starlight_class_matches >= 3 && (has_astro_meta || has_starlight_meta || has_starlight_vars) {
             Ok(ConfidenceLevel::High)
-        } else if starlight_class_matches >= 2 || has_starlight_meta || has_starlight_vars {
+        } else if starlight_class_matches >= 2 || has_astro_meta || has_starlight_meta || has_starlight_vars {
             Ok(ConfidenceLevel::Medium)
         } else if starlight_class_matches >= 1 {
             Ok(ConfidenceLevel::Low)
@@ -111,20 +100,22 @@ impl FormatHandler for StarlightHandler {
         // Try to extract Astro version from meta generator tag
         let document = Html::parse_document(&content);
         
-        if let Some(meta) = document.select(&Selector::parse(r#"meta[name="generator"]"#).unwrap()).next() {
-            if let Some(generator_content) = meta.value().attr("content") {
-                if generator_content.to_lowercase().contains("astro") {
-                    // Extract version if present (e.g., "Astro v4.0.0")
-                    if let Some(version_start) = generator_content.find("v") {
-                        if let Some(version_part) = generator_content.get(version_start..) {
-                            if let Some(space_pos) = version_part.find(' ') {
-                                return Ok(Some(format!("Astro {}", &version_part[..space_pos])));
-                            } else {
-                                return Ok(Some(format!("Astro {}", version_part)));
+        if let Ok(selector) = Selector::parse(r#"meta[name="generator"]"#) {
+            if let Some(meta) = document.select(&selector).next() {
+                if let Some(generator_content) = meta.value().attr("content") {
+                    if generator_content.to_lowercase().contains("astro") {
+                        // Extract version if present (e.g., "Astro v4.0.0")
+                        if let Some(version_start) = generator_content.find("v") {
+                            if let Some(version_part) = generator_content.get(version_start..) {
+                                if let Some(space_pos) = version_part.find(' ') {
+                                    return Ok(Some(format!("Astro {}", &version_part[..space_pos])));
+                                } else {
+                                    return Ok(Some(format!("Astro {}", version_part)));
+                                }
                             }
                         }
+                        return Ok(Some("Astro (Starlight)".to_string()));
                     }
-                    return Ok(Some("Astro (Starlight)".to_string()));
                 }
             }
         }
