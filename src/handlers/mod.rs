@@ -123,6 +123,7 @@ impl HandlersRegistry {
         registry.register(Box::new(vitepress_v2::VitePressV2Handler));
         registry.register(Box::new(vocs::VocsHandler));
         registry.register(Box::new(starlight::StarlightHandler));
+        registry.register(Box::new(sphinx::SphinxHandler));
         
         registry
     }
@@ -143,6 +144,7 @@ pub mod vitepress_v1;
 pub mod vitepress_v2;
 pub mod vocs;
 pub mod starlight;
+pub mod sphinx;
 
 pub use gitbook::GitBookHandler;
 pub use docusaurus::DocusaurusHandler;
@@ -153,3 +155,4 @@ pub use vitepress_v1::VitePressV1Handler;
 pub use vitepress_v2::VitePressV2Handler;
 pub use vocs::VocsHandler;
 pub use starlight::StarlightHandler;
+pub use sphinx::SphinxHandler;

@@ -55,6 +55,11 @@ book2pdf automatically detects and supports the following documentation platform
 - **Format**: starlight  
 - **Auto-detection**: Detects Starlight CSS layers and Astro-based components
 
+### Sphinx
+- **Versions**: v5.x, v6.x, v7.x, v8.x
+- **Format**: sphinx
+- **Auto-detection**: Detects Sphinx generator meta tags, themes (ReadTheDocs, Furo, PyData, Jupyter Book), and navigation patterns
+
 To see all supported formats, run:
 ```bash
 cargo run -- download --list
