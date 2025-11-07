@@ -60,6 +60,11 @@ book2pdf automatically detects and supports the following documentation platform
 - **Format**: sphinx
 - **Auto-detection**: Detects Sphinx generator meta tags, themes (ReadTheDocs, Furo, PyData, Jupyter Book), and navigation patterns
 
+### Nextra
+- **Versions**: v2.x, v3.x, v4.x
+- **Format**: nextra
+- **Auto-detection**: Detects Next.js with Nextra CSS variables, MDX patterns, and framework-specific classes
+
 To see all supported formats, run:
 ```bash
 cargo run -- download --list

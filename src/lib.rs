@@ -16,6 +16,7 @@
 //! - **VitePress** (v1.x, v2.x+) - Vue.js ecosystem documentation
 //! - **vocs** (v1.x+) - Modern documentation framework
 //! - **Starlight** (v0.x) - Astro-based documentation framework
+//! - **Nextra** (v2.x-4.x) - Next.js-based documentation framework with MDX
 //! - **Sphinx** (v5.x-8.x) - Python documentation generator with multiple themes
 //!
 //! ## Features
