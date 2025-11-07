@@ -50,6 +50,11 @@ book2pdf automatically detects and supports the following documentation platform
 - **Format**: vocs
 - **Auto-detection**: Detects vocs data-vocs attribute and CSS classes
 
+### Starlight
+- **Versions**: v0.x
+- **Format**: starlight  
+- **Auto-detection**: Detects Starlight CSS layers and Astro-based components
+
 To see all supported formats, run:
 ```bash
 cargo run -- download --list
