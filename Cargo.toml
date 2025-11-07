@@ -30,3 +30,6 @@ dirs = "5.0"
 [[bin]]
 name = "book2pdf"
 path = "src/main.rs"
+
+[package.metadata.license-checker]
+deny = []

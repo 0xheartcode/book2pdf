@@ -4,6 +4,12 @@ A CLI utility to convert documentation websites into PDF files for offline readi
 
 **⚠️ Clunky Alpha Software** - Basic functionality works but expect stability issues.
 Documentations with multiple pages may take up all your ram 🤯. Be safe.
+
+## Issues
+
+In case a specific website does not scrape correctly, please create an issue or a PR (if you're inclined).
+Either way it will be tested and fixed. This is all early so expect lots of changes.
+
 ## Requirements
 
 - **Rust 1.70+** - [Install Rust](https://rustup.rs/)
