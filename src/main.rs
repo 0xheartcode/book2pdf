@@ -138,7 +138,7 @@ async fn main() {
     let filter = EnvFilter::from_default_env()
         .add_directive("chromiumoxide::conn=off".parse().unwrap())
         .add_directive("chromiumoxide::handler=off".parse().unwrap())
-        .add_directive(format!("book2pdf={book2pdf_level}").parse().unwrap())
+        .add_directive(format!("book2pdf={}", book2pdf_level).parse().unwrap())
         .add_directive(global_level.parse().unwrap());
     
     tracing_subscriber::registry()
@@ -165,11 +165,11 @@ async fn main() {
             };
             
             // Use CLI args or fallback to config values
-            let output_dir = out_dir.unwrap_or(config.output.folder.clone());
-            let combine = if no_combine { false } else { config.output.combine_pdfs };
-            let preserve = if preserve_pages { true } else { config.output.preserve_pages };
+            let output_dir = out_dir.unwrap_or_else(|| config.output.folder.clone());
+            let combine = !no_combine && config.output.combine_pdfs;
+            let preserve = preserve_pages || config.output.preserve_pages;
             let timeout_val = timeout.unwrap_or(config.browser.timeout);
-            let show_window = if show_browser { true } else { config.browser.show_window };
+            let show_window = show_browser || config.browser.show_window;
             
             // Debug logging to verify values
             tracing::debug!("Using output_dir: {}", output_dir);

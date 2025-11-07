@@ -88,22 +88,25 @@ impl PdfMerger {
         Ok(())
     }
 
-    pub async fn save(&self, output_path: &Path) -> Result<()> {
+    pub async fn save(mut self, output_path: &Path) -> Result<()> {
         if self.documents.is_empty() {
             return Err(anyhow!("No PDFs added to merge"));
         }
 
         if self.documents.len() == 1 {
-            // If only one document, just copy it
-            let data = fs::read(&output_path).await.unwrap_or_default();
+            // If only one document, save it directly
+            let mut data = Vec::new();
+            self.documents[0].1.save_to(&mut data)
+                .map_err(|e| anyhow!("Failed to save single PDF: {e}"))?;
             fs::write(output_path, data).await?;
+            info!("Saved single PDF to {}", output_path.display());
             return Ok(());
         }
 
         info!("Starting PDF merge process with {} documents", self.documents.len());
 
-        // Use the first document as the base
-        let mut merged_doc = self.documents[0].1.clone();
+        // Take ownership of the first document to avoid cloning
+        let mut merged_doc = self.documents.remove(0).1;
         let mut all_page_ids = Vec::new();
         
         // Collect page IDs from the first document
@@ -116,28 +119,30 @@ impl PdfMerger {
         // Add pages from remaining documents
         let mut max_id = merged_doc.max_id;
         
-        for (i, (filename, document)) in self.documents.iter().skip(1).enumerate() {
-            debug!("Processing document {}: {} with {} pages", 
-                   i + 2, filename, document.get_pages().len());
-            
-            let mut doc_copy = document.clone();
+        // Process documents one by one and immediately drop them
+        while !self.documents.is_empty() {
+            let (filename, mut document) = self.documents.remove(0);
+            debug!("Processing document: {} with {} pages", 
+                   filename, document.get_pages().len());
             
             // Renumber objects to avoid conflicts
-            doc_copy.renumber_objects_with(max_id + 1);
-            max_id = doc_copy.max_id;
+            document.renumber_objects_with(max_id + 1);
+            max_id = document.max_id;
             
             // Get pages from this document
-            let pages = doc_copy.get_pages();
+            let pages = document.get_pages();
             
-            // Copy all objects from this document
-            for (obj_id, obj) in doc_copy.objects.iter() {
-                merged_doc.objects.insert(*obj_id, obj.clone());
+            // Move all objects from this document (avoiding clone)
+            for (obj_id, obj) in document.objects.into_iter() {
+                merged_doc.objects.insert(obj_id, obj);
             }
             
             // Add page IDs to our list
             for (_, page_id) in pages {
                 all_page_ids.push(page_id);
             }
+            
+            // Document is automatically dropped here, freeing memory
         }
 
         info!("Total pages collected: {}", all_page_ids.len());
