@@ -1,0 +1,213 @@
+# Real documentation sites for testing format detection
+# Each URL should point to the actual documentation start page, not the main site
+
+# Sphinx Sites
+[[test_site]]
+url = "https://docs.python.org/3/"
+expected_format = "sphinx"
+expected_confidence = "high"
+description = "Python official docs - Sphinx"
+
+[[test_site]]
+url = "https://ddtrace.readthedocs.io/en/stable/"
+expected_format = "sphinx"
+expected_confidence = "high"
+description = "Datadog tracer docs - Sphinx on ReadTheDocs"
+
+[[test_site]]
+url = "https://odl.readthedocs.io/en/latest/"
+expected_format = "sphinx"
+expected_confidence = "high"
+description = "OpenDaylight docs - Sphinx"
+
+# Docusaurus Sites  
+[[test_site]]
+url = "https://docusaurus.io/docs"
+expected_format = "docusaurus"
+expected_confidence = "certain"
+description = "Docusaurus official docs"
+
+[[test_site]]
+url = "https://react.dev/learn"
+expected_format = "docusaurus"
+expected_confidence = "high"
+description = "React official docs - Docusaurus"
+
+# mdBook Sites
+[[test_site]]
+url = "https://doc.rust-lang.org/book/"
+expected_format = "mdbook"
+expected_confidence = "certain"
+description = "The Rust Book - mdBook"
+
+[[test_site]]
+url = "https://danielkeep.github.io/tlborm/book/"
+expected_format = "mdbook"
+expected_confidence = "high"
+description = "The Little Book of Rust Macros - mdBook"
+
+[[test_site]]
+url = "https://lborb.github.io/book/"
+expected_format = "mdbook"
+expected_confidence = "high"
+description = "Linux Book - mdBook"
+
+# MkDocs Sites
+[[test_site]]
+url = "https://mkdocs.org/user-guide/"
+expected_format = "mkdocs"
+expected_confidence = "high"
+description = "MkDocs official docs"
+
+# VitePress Sites
+[[test_site]]
+url = "https://vitepress.dev/guide/getting-started"
+expected_format = "vitepress"
+expected_confidence = "high"
+description = "VitePress official docs"
+
+[[test_site]]
+url = "https://vite.dev/guide/"
+expected_format = "vitepress"
+expected_confidence = "high"
+description = "Vite official docs - VitePress"
+
+# Nextra Sites
+[[test_site]]
+url = "https://nextra.site/docs"
+expected_format = "nextra"
+expected_confidence = "high"
+description = "Nextra official docs"
+
+[[test_site]]
+url = "https://pnpm.io/installation"
+expected_format = "nextra"
+expected_confidence = "medium"
+description = "PNPM docs - Nextra"
+
+# Starlight Sites
+[[test_site]]
+url = "https://starlight.astro.build/getting-started/"
+expected_format = "starlight"
+expected_confidence = "high"
+description = "Starlight official docs"
+
+# vocs Sites
+[[test_site]]
+url = "https://vocs.dev/docs"
+expected_format = "vocs"
+expected_confidence = "high"
+description = "vocs official docs"
+
+# More sites 
+[[test_site]]
+url = "https://tokio.rs/tokio/tutorial"
+expected_format = "unknown"
+expected_confidence = "low"
+description = "Tokio tutorial - likely custom framework"
+
+[[test_site]]
+url = "https://gohugo.io/getting-started/"
+expected_format = "unknown"
+expected_confidence = "low"
+description = "Hugo getting started - not currently supported"
+
+# GitBook Sites 
+# Most have migrated, but some may still exist
+
+# Additional real documentation sites
+[[test_site]]
+url = "https://grafana.com/docs/"
+expected_format = "unknown"
+expected_confidence = "low"
+description = "Grafana docs - likely Hugo or custom"
+
+[[test_site]]
+url = "https://kubernetes.io/docs/"
+expected_format = "unknown"
+expected_confidence = "low"
+description = "Kubernetes docs - likely Hugo"
+
+# More Sphinx sites
+[[test_site]]
+url = "https://django-rest-framework.readthedocs.io/"
+expected_format = "sphinx"
+expected_confidence = "high"
+description = "Django REST Framework - Sphinx"
+
+# More VitePress sites
+[[test_site]]
+url = "https://vue3datepicker.com/installation/"
+expected_format = "vitepress"
+expected_confidence = "medium"
+description = "Vue3 DatePicker docs - VitePress"
+
+# Nextra 
+[[test_site]]
+url = "https://thirdweb.com/docs"
+expected_format = "nextra"
+expected_confidence = "medium"
+description = "Thirdweb docs - likely Nextra"
+
+# More mdBook sites
+[[test_site]]
+url = "https://wofwca.github.io/mdBook/format/config.html"
+expected_format = "mdbook"
+expected_confidence = "high"
+description = "mdBook format config - mdBook"
+
+[[test_site]]
+url = "https://phaiax.github.io/mdBook/print.html"
+expected_format = "mdbook"
+expected_confidence = "high"
+description = "mdBook print page - mdBook"
+
+# More VitePress sites  
+[[test_site]]
+url = "https://vue3datepicker.com/installation/"
+expected_format = "vitepress"
+expected_confidence = "medium"
+description = "Vue3 DatePicker docs - VitePress"
+
+[[test_site]]
+url = "https://vite.dev/guide/migration.html"
+expected_format = "vitepress"
+expected_confidence = "high"
+description = "Vite migration guide - VitePress"
+
+# Additional sites 
+[[test_site]]
+url = "https://e2b.dev/docs"
+expected_format = "nextra"
+expected_confidence = "medium"
+description = "E2B docs - likely Nextra"
+
+[[test_site]]
+url = "https://getfoundry.sh/introduction/getting-started"
+expected_format = "mdbook"
+expected_confidence = "medium"
+description = "Foundry docs - likely mdBook"
+
+[[test_site]]
+url = "https://rrelayer.xyz/introduction/what-is-rrelayer"
+expected_format = "mdbook"
+expected_confidence = "medium"
+description = "RRelayer intro - likely mdBook"
+
+[[test_site]]
+url = "https://tm1py.org/latest/"
+expected_format = "sphinx"
+expected_confidence = "medium"
+description = "TM1py docs - likely Sphinx"
+
+[[test_site]]
+url = "https://tier4.github.io/scenario_simulator_v2-docs/"
+expected_format = "mdbook"
+expected_confidence = "medium"
+description = "Tier4 docs - likely mdBook"
+
+[[test_site]]
+url = "https://moenarch.github.io/moenarchbook/index.html"
+expected_format = "mdbook"
+expected_confidence = "high"
+description = "Moenarch book - mdBook"
