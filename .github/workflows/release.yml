@@ -45,11 +45,10 @@ jobs:
         run: |
           set -euo pipefail
           name="book2pdf-${GITHUB_REF_NAME}-${{ matrix.target }}"
-          dir="dist/$name"
-          mkdir -p "$dir"
-          cp "target/${{ matrix.target }}/release/book2pdf" "$dir/"
-          cp README.md LICENSE CHANGELOG.md "$dir/"
-          tar -C dist -czf "$name.tar.gz" "$name"
+          mkdir -p "staging/$name" dist
+          cp "target/${{ matrix.target }}/release/book2pdf" "staging/$name/"
+          cp README.md LICENSE CHANGELOG.md "staging/$name/"
+          tar -C staging -czf "dist/$name.tar.gz" "$name"
 
       - name: Package (windows)
         if: runner.os == 'Windows'
@@ -57,11 +56,10 @@ jobs:
         run: |
           set -euo pipefail
           name="book2pdf-${GITHUB_REF_NAME}-${{ matrix.target }}"
-          dir="dist/$name"
-          mkdir -p "$dir"
-          cp "target/${{ matrix.target }}/release/book2pdf.exe" "$dir/"
-          cp README.md LICENSE CHANGELOG.md "$dir/"
-          7z a "$name.zip" "./dist/$name"
+          mkdir -p "staging/$name" dist
+          cp "target/${{ matrix.target }}/release/book2pdf.exe" "staging/$name/"
+          cp README.md LICENSE CHANGELOG.md "staging/$name/"
+          7z a "dist/$name.zip" "./staging/$name"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
