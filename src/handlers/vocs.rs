@@ -1,12 +1,12 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use chromiumoxide::Page;
 use scraper::{Html, Selector};
 use tracing::debug;
 use url::Url;
 
-use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
 use crate::handlers::utils;
+use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
 
 /// Handler for vocs documentation sites
 pub struct VocsHandler;
@@ -15,44 +15,46 @@ pub struct VocsHandler;
 impl SiteDetector for VocsHandler {
     async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
         let document = Html::parse_document(content);
-        
+
         // Primary vocs detection: data-vocs attribute on html element
-        let has_data_vocs = content.contains("data-vocs") ||
-                           content.contains("html data-vocs") ||
-                           utils::has_css_selector(&document, "html[data-vocs]");
-        
+        let has_data_vocs = content.contains("data-vocs")
+            || content.contains("html data-vocs")
+            || utils::has_css_selector(&document, "html[data-vocs]");
+
         // Check for vocs-specific CSS class patterns
         let vocs_selectors = [
-            ".vocs_DocsLayout",                   // Main layout container
-            ".vocs_Sidebar",                      // Sidebar component
-            ".vocs_Content",                      // Content wrapper
-            "#vocs-content",                      // Content area ID
-            ".vocs_Sidebar_navigation",           // Navigation wrapper
-            ".vocs_Sidebar_item",                 // Navigation items
-            ".vocs_DesktopTopNav",               // Top navigation
-            ".vocs_DocsLayout_content"           // Layout content area
+            ".vocs_DocsLayout",         // Main layout container
+            ".vocs_Sidebar",            // Sidebar component
+            ".vocs_Content",            // Content wrapper
+            "#vocs-content",            // Content area ID
+            ".vocs_Sidebar_navigation", // Navigation wrapper
+            ".vocs_Sidebar_item",       // Navigation items
+            ".vocs_DesktopTopNav",      // Top navigation
+            ".vocs_DocsLayout_content", // Layout content area
         ];
-        
+
         let mut vocs_class_matches = 0;
-        
+
         for selector_str in &vocs_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    vocs_class_matches += 1;
-                    debug!("Found vocs selector: {}", selector_str);
-                }
+            if let Ok(selector) = Selector::parse(selector_str)
+                && document.select(&selector).next().is_some()
+            {
+                vocs_class_matches += 1;
+                debug!("Found vocs selector: {}", selector_str);
             }
         }
-        
+
         // Check for vocs-specific patterns in content
-        let has_vocs_patterns = content.contains("vocs_") ||
-                               content.contains("#vocs-content") ||
-                               content.contains("data-vocs");
-        
+        let has_vocs_patterns = content.contains("vocs_")
+            || content.contains("#vocs-content")
+            || content.contains("data-vocs");
+
         // Confidence logic
         if has_data_vocs && vocs_class_matches >= 3 {
             Ok(ConfidenceLevel::Certain)
-        } else if (has_data_vocs && vocs_class_matches >= 1) || (vocs_class_matches >= 3 && has_vocs_patterns) {
+        } else if (has_data_vocs && vocs_class_matches >= 1)
+            || (vocs_class_matches >= 3 && has_vocs_patterns)
+        {
             Ok(ConfidenceLevel::High)
         } else if vocs_class_matches >= 2 || has_vocs_patterns {
             Ok(ConfidenceLevel::Medium)
@@ -62,11 +64,11 @@ impl SiteDetector for VocsHandler {
             Ok(ConfidenceLevel::None)
         }
     }
-    
+
     fn version(&self) -> &str {
         "v1.x"
     }
-    
+
     fn format_name(&self) -> &str {
         "vocs"
     }
@@ -76,8 +78,9 @@ impl SiteDetector for VocsHandler {
 impl FormatHandler for VocsHandler {
     async fn expand_navigation(&self, page: &Page) -> Result<()> {
         debug!("Expanding vocs navigation...");
-        
-        page.evaluate(r#"
+
+        page.evaluate(
+            r#"
             (() => {
                 // Expand vocs navigation sections
                 const collapsibleSections = document.querySelectorAll([
@@ -123,73 +126,81 @@ impl FormatHandler for VocsHandler {
                 
                 console.log('vocs navigation expanded');
             })()
-        "#).await.map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
-        
+        "#,
+        )
+        .await
+        .map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
+
         Ok(())
     }
-    
+
     async fn extract_links(&self, page: &Page, base_url: &Url) -> Result<Vec<String>> {
         debug!("Extracting links from vocs...");
-        
+
         let content = page
             .content()
             .await
             .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
+
         let document = Html::parse_document(&content);
-        
+
         // vocs specific navigation selectors
         let link_selectors = [
-            ".vocs_Sidebar_item",                 // Primary sidebar navigation items
-            ".vocs_Sidebar_navigation a",         // All sidebar navigation links
-            ".vocs_Sidebar_items a",              // Section items
-            ".vocs_NavigationMenu_link",          // Top navigation links
-            ".vocs_Sidebar a[href]",              // Any link in sidebar
-            "nav a[href]",                        // Generic navigation links
-            "aside a[href]"                       // Aside navigation links
+            ".vocs_Sidebar_item",         // Primary sidebar navigation items
+            ".vocs_Sidebar_navigation a", // All sidebar navigation links
+            ".vocs_Sidebar_items a",      // Section items
+            ".vocs_NavigationMenu_link",  // Top navigation links
+            ".vocs_Sidebar a[href]",      // Any link in sidebar
+            "nav a[href]",                // Generic navigation links
+            "aside a[href]",              // Aside navigation links
         ];
-        
+
         let mut links = Vec::new();
-        
+
         for selector_str in &link_selectors {
             if let Ok(selector) = Selector::parse(selector_str) {
                 for element in document.select(&selector) {
-                    if let Some(href) = element.value().attr("href") {
-                        if let Ok(absolute_url) = base_url.join(href) {
-                            let url_str = absolute_url.to_string();
-                            
-                            // Filter out non-content links
-                            if !url_str.contains("#") &&
-                               !url_str.contains("mailto:") &&
-                               !url_str.contains("javascript:") &&
-                               !url_str.contains("tel:") &&
-                               !url_str.contains("?") &&
-                               !url_str.ends_with(".css") &&
-                               !url_str.ends_with(".js") &&
-                               !url_str.ends_with(".png") &&
-                               !url_str.ends_with(".jpg") &&
-                               !url_str.ends_with(".svg") &&
-                               !links.contains(&url_str) {
-                                links.push(url_str);
-                            }
+                    if let Some(href) = element.value().attr("href")
+                        && let Ok(absolute_url) = base_url.join(href)
+                    {
+                        let url_str = absolute_url.to_string();
+
+                        // Filter out non-content links
+                        if !url_str.contains("#")
+                            && !url_str.contains("mailto:")
+                            && !url_str.contains("javascript:")
+                            && !url_str.contains("tel:")
+                            && !url_str.contains("?")
+                            && !url_str.ends_with(".css")
+                            && !url_str.ends_with(".js")
+                            && !url_str.ends_with(".png")
+                            && !url_str.ends_with(".jpg")
+                            && !url_str.ends_with(".svg")
+                            && !links.contains(&url_str)
+                        {
+                            links.push(url_str);
                         }
                     }
                 }
-                
+
                 if !links.is_empty() {
-                    debug!("Found {} links using vocs selector: {}", links.len(), selector_str);
+                    debug!(
+                        "Found {} links using vocs selector: {}",
+                        links.len(),
+                        selector_str
+                    );
                     break;
                 }
             }
         }
-        
+
         debug!("Extracted {} links from vocs", links.len());
         Ok(links)
     }
-    
+
     async fn prepare_page(&self, page: &Page) -> Result<()> {
         debug!("Preparing vocs page for PDF...");
-        
+
         page.evaluate(r#"
             (() => {
                 const style = document.createElement('style');
@@ -312,12 +323,14 @@ impl FormatHandler for VocsHandler {
                 console.log('vocs page prepared for PDF');
             })()
         "#).await.map_err(|e| anyhow!("Failed to prepare page: {e}"))?;
-        
+
         Ok(())
     }
-    
+
     async fn detect_version(&self, page: &Page) -> Result<Option<String>> {
-        let version_result = page.evaluate(r#"
+        let version_result = page
+            .evaluate(
+                r#"
             (() => {
                 // Check for version in top navigation
                 const navTrigger = document.querySelector('.vocs_NavigationMenu_trigger');
@@ -367,23 +380,25 @@ impl FormatHandler for VocsHandler {
                 
                 return null;
             })()
-        "#).await;
-        
-        if let Ok(result) = version_result {
-            if let Ok(version) = result.into_value::<String>() {
-                if !version.is_empty() && version != "null" {
-                    return Ok(Some(version));
-                }
-            }
+        "#,
+            )
+            .await;
+
+        if let Ok(result) = version_result
+            && let Ok(version) = result.into_value::<String>()
+            && !version.is_empty()
+            && version != "null"
+        {
+            return Ok(Some(version));
         }
-        
+
         Ok(None)
     }
-    
+
     fn name(&self) -> &str {
         "vocs Handler"
     }
-    
+
     fn supported_versions(&self) -> Vec<&str> {
         vec!["v1.x+"]
     }

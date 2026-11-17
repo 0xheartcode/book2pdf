@@ -12,7 +12,7 @@ Either way it will be tested and fixed. This is all early so expect lots of chan
 
 ## Requirements
 
-- **Rust 1.70+** - [Install Rust](https://rustup.rs/)
+- **Rust** - a recent stable toolchain ([Install Rust](https://rustup.rs/))
 - **Chrome/Chromium browser** - Must be installed and accessible in PATH
 - **Internet connection** - For website scraping
 
@@ -74,10 +74,18 @@ cargo run -- download --list
 
 ## Installation
 
+### Install from crates.io
+
+```bash
+cargo install book2pdf
+```
+
+This installs the `book2pdf` binary into `~/.cargo/bin`. You still need Chrome/Chromium available (see Requirements).
+
 ### Build from Source
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/0xheartcode/book2pdf.git
 cd book2pdf
 cargo build --release
 ```
@@ -87,7 +95,7 @@ The binary will be available at `target/release/book2pdf`
 ### Run Directly (Development)
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/0xheartcode/book2pdf.git
 cd book2pdf
 cargo run -- download https://docs.example.com
 ```
@@ -126,7 +134,7 @@ Arguments:
   <URL>  URL of the website to scrape
 
 Options:
-  -o, --outDir <OUT_DIR>   Output directory used to save files
+  -o, --out-dir <OUT_DIR>  Output directory used to save files
   -v, --verbose            Enable verbose output (debug level)
   -d, --debug              Enable debug output (trace level)
       --no-combine         Don't combine PDFs into a single file (by default PDFs are combined)
@@ -136,6 +144,7 @@ Options:
   -t, --timeout <TIMEOUT>  Request timeout in seconds
       --pages <PAGES>      Limit the number of pages to download
       --show-browser       Show browser window (headless by default)
+      --no-sandbox         Launch Chrome with --no-sandbox (for Ubuntu 23.10+, Docker, CI; trusted envs only)
   -s, --simulate           Simulate mode - execute everything but don't actually download or create files
   -h, --help               Print help
 ```
@@ -177,7 +186,7 @@ Configuration precedence: CLI arguments > config file > defaults
 cargo run -- download https://docs.example.com
 
 # Download to custom directory
-book2pdf download https://docs.example.com --outDir my-docs
+book2pdf download https://docs.example.com --out-dir my-docs
 
 # Keep individual page PDFs alongside combined PDF
 book2pdf download https://docs.example.com --preserve-pages
@@ -235,6 +244,25 @@ cargo build --release
 
 # Generate documentation
 cargo doc --open
+```
+
+## Troubleshooting
+
+### "No usable sandbox!" / browser fails to launch
+
+On Ubuntu 23.10+, inside Docker, or on CI runners, unprivileged user
+namespaces are often disabled, so Chrome/Chromium cannot start its sandbox and
+book2pdf fails with `Failed to launch browser`. Workarounds:
+
+- Pass `--no-sandbox` (or set `no_sandbox = true` under `[browser]` in your
+  config). Only do this in a trusted environment:
+
+  ```bash
+  book2pdf download https://docs.example.com --no-sandbox
+  ```
+
+- Or run on a host/profile where user namespaces are enabled.
+
 ```
 
 

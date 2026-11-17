@@ -40,12 +40,12 @@
 //! book2pdf download https://docs.example.com --pages 10
 //! ```
 
-mod downloader;
-mod pdf_merger;
 pub mod config;
+mod downloader;
 pub mod handlers;
+mod pdf_merger;
 
-pub use downloader::Downloader;
-pub use pdf_merger::PdfMerger;
 pub use config::Config;
-pub use handlers::{HandlersRegistry, FormatHandler, SiteDetector, ConfidenceLevel};
+pub use downloader::Downloader;
+pub use handlers::{ConfidenceLevel, FormatHandler, HandlersRegistry, SiteDetector};
+pub use pdf_merger::PdfMerger;

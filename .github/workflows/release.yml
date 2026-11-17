@@ -1,0 +1,111 @@
+name: Release
+
+# Build prebuilt `book2pdf` binaries for Linux, macOS and Windows and attach them to a
+# GitHub Release when a version tag (v*) is pushed. The release is titled "vX.Y.Z - DATE"
+# and its body is the matching section of CHANGELOG.md. Published as a draft so it can be
+# reviewed before going public.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin book2pdf
+
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="book2pdf-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          dir="dist/$name"
+          mkdir -p "$dir"
+          cp "target/${{ matrix.target }}/release/book2pdf" "$dir/"
+          cp README.md LICENSE CHANGELOG.md "$dir/"
+          tar -C dist -czf "$name.tar.gz" "$name"
+
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="book2pdf-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          dir="dist/$name"
+          mkdir -p "$dir"
+          cp "target/${{ matrix.target }}/release/book2pdf.exe" "$dir/"
+          cp README.md LICENSE CHANGELOG.md "$dir/"
+          7z a "$name.zip" "./dist/$name"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: book2pdf-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: publish draft release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Compose release title and notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          echo "RELEASE_NAME=${GITHUB_REF_NAME} - $(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
+          # Pull the matching section out of CHANGELOG.md for the release body.
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { grab = 1; next }
+            grab && /^## \[/ { exit }
+            grab { print }
+          ' CHANGELOG.md > notes.md || true
+          if [ ! -s notes.md ]; then
+            echo "See CHANGELOG.md for details." > notes.md
+          fi
+
+      - name: Create draft GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.RELEASE_NAME }}
+          body_path: notes.md
+          files: artifacts/**/*
+          draft: true
+          fail_on_unmatched_files: true

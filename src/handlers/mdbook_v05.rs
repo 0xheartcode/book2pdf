@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use chromiumoxide::Page;
 use scraper::{Html, Selector};
@@ -14,48 +14,48 @@ pub struct MdBookV05Handler;
 impl SiteDetector for MdBookV05Handler {
     async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
         let document = Html::parse_document(content);
-        
+
         // Must have mdBook comment
         if !content.contains("Book generated using mdBook") {
             return Ok(ConfidenceLevel::None);
         }
-        
+
         // Check for v0.5+ specific selectors (including hybrid patterns)
         let v05_selectors = [
-            "#mdbook-sidebar",               // New sidebar ID
-            "mdbook-sidebar-scrollbox",      // New custom element (key identifier!)
-            "#mdbook-content",               // New content ID
-            "#mdbook-menu-bar",              // New menu bar
-            "#mdbook-sidebar-toggle",        // New sidebar toggle
-            "#sidebar",                      // Hybrid: old ID with new elements
-            "#content"                       // Hybrid: old ID with new elements
+            "#mdbook-sidebar",          // New sidebar ID
+            "mdbook-sidebar-scrollbox", // New custom element (key identifier!)
+            "#mdbook-content",          // New content ID
+            "#mdbook-menu-bar",         // New menu bar
+            "#mdbook-sidebar-toggle",   // New sidebar toggle
+            "#sidebar",                 // Hybrid: old ID with new elements
+            "#content",                 // Hybrid: old ID with new elements
         ];
-        
+
         let mut selector_matches = 0;
-        
+
         for selector_str in &v05_selectors {
-            if let Ok(selector) = Selector::parse(selector_str) {
-                if document.select(&selector).next().is_some() {
-                    selector_matches += 1;
-                    debug!("Found v0.5+ selector: {}", selector_str);
-                }
+            if let Ok(selector) = Selector::parse(selector_str)
+                && document.select(&selector).next().is_some()
+            {
+                selector_matches += 1;
+                debug!("Found v0.5+ selector: {}", selector_str);
             }
         }
-        
+
         // High confidence if we have modern v0.5+ elements
         match selector_matches {
             4..=5 => Ok(ConfidenceLevel::Certain),
             3 => Ok(ConfidenceLevel::High),
             2 => Ok(ConfidenceLevel::Medium),
-            1 => Ok(ConfidenceLevel::Low),  // More lenient
+            1 => Ok(ConfidenceLevel::Low), // More lenient
             _ => Ok(ConfidenceLevel::None),
         }
     }
-    
+
     fn version(&self) -> &str {
         "v0.5+"
     }
-    
+
     fn format_name(&self) -> &str {
         "mdbook-v0.5+"
     }
@@ -65,8 +65,9 @@ impl SiteDetector for MdBookV05Handler {
 impl FormatHandler for MdBookV05Handler {
     async fn expand_navigation(&self, page: &Page) -> Result<()> {
         debug!("Expanding mdBook v0.5+ navigation...");
-        
-        page.evaluate(r#"
+
+        page.evaluate(
+            r#"
             (() => {
                 // v0.5+ has collapsible chapters
                 const foldToggles = document.querySelectorAll('.chapter-fold-toggle');
@@ -87,65 +88,73 @@ impl FormatHandler for MdBookV05Handler {
                 
                 console.log('mdBook v0.5+ navigation expanded');
             })()
-        "#).await.map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
-        
+        "#,
+        )
+        .await
+        .map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
+
         Ok(())
     }
-    
+
     async fn extract_links(&self, page: &Page, base_url: &Url) -> Result<Vec<String>> {
         debug!("Extracting links from mdBook v0.5+...");
-        
+
         let content = page
             .content()
             .await
             .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
+
         let document = Html::parse_document(&content);
-        
+
         // v0.5+ specific navigation selectors
         let link_selectors = [
-            "#mdbook-sidebar a",                    // New sidebar
-            "mdbook-sidebar-scrollbox a",           // New custom element
-            ".sidebar a",                           // Generic sidebar
-            ".chapter-item a, .chapter a",          // Modern chapter links
-            "nav[aria-label='Table of contents'] a" // ARIA navigation
+            "#mdbook-sidebar a",                     // New sidebar
+            "mdbook-sidebar-scrollbox a",            // New custom element
+            ".sidebar a",                            // Generic sidebar
+            ".chapter-item a, .chapter a",           // Modern chapter links
+            "nav[aria-label='Table of contents'] a", // ARIA navigation
         ];
-        
+
         let mut links = Vec::new();
-        
+
         for selector_str in &link_selectors {
             if let Ok(selector) = Selector::parse(selector_str) {
                 for element in document.select(&selector) {
-                    if let Some(href) = element.value().attr("href") {
-                        if let Ok(absolute_url) = base_url.join(href) {
-                            let url_str = absolute_url.to_string();
-                            
-                            // Filter out non-content links
-                            if !url_str.contains("print.html") &&
-                               !url_str.contains("#") &&
-                               !url_str.contains("mailto:") &&
-                               !url_str.contains("javascript:") &&
-                               !links.contains(&url_str) {
-                                links.push(url_str);
-                            }
+                    if let Some(href) = element.value().attr("href")
+                        && let Ok(absolute_url) = base_url.join(href)
+                    {
+                        let url_str = absolute_url.to_string();
+
+                        // Filter out non-content links
+                        if !url_str.contains("print.html")
+                            && !url_str.contains("#")
+                            && !url_str.contains("mailto:")
+                            && !url_str.contains("javascript:")
+                            && !links.contains(&url_str)
+                        {
+                            links.push(url_str);
                         }
                     }
                 }
-                
+
                 if !links.is_empty() {
-                    debug!("Found {} links using v0.5+ selector: {}", links.len(), selector_str);
+                    debug!(
+                        "Found {} links using v0.5+ selector: {}",
+                        links.len(),
+                        selector_str
+                    );
                     break;
                 }
             }
         }
-        
+
         debug!("Extracted {} links from mdBook v0.5+", links.len());
         Ok(links)
     }
-    
+
     async fn prepare_page(&self, page: &Page) -> Result<()> {
         debug!("Preparing mdBook v0.5+ page for PDF...");
-        
+
         page.evaluate(r#"
             (() => {
                 const style = document.createElement('style');
@@ -220,12 +229,14 @@ impl FormatHandler for MdBookV05Handler {
                 console.log('mdBook v0.5+ page prepared for PDF');
             })()
         "#).await.map_err(|e| anyhow!("Failed to prepare page: {e}"))?;
-        
+
         Ok(())
     }
-    
+
     async fn detect_version(&self, page: &Page) -> Result<Option<String>> {
-        let version_result = page.evaluate(r#"
+        let version_result = page
+            .evaluate(
+                r#"
             (() => {
                 // Check generator meta tag
                 const meta = document.querySelector('meta[name="generator"]');
@@ -267,23 +278,25 @@ impl FormatHandler for MdBookV05Handler {
                 
                 return null;
             })()
-        "#).await;
-        
-        if let Ok(result) = version_result {
-            if let Ok(version) = result.into_value::<String>() {
-                if !version.is_empty() && version != "null" {
-                    return Ok(Some(version));
-                }
-            }
+        "#,
+            )
+            .await;
+
+        if let Ok(result) = version_result
+            && let Ok(version) = result.into_value::<String>()
+            && !version.is_empty()
+            && version != "null"
+        {
+            return Ok(Some(version));
         }
-        
+
         Ok(None)
     }
-    
+
     fn name(&self) -> &str {
         "mdBook Handler (v0.5.x+)"
     }
-    
+
     fn supported_versions(&self) -> Vec<&str> {
         vec!["v0.5.x+"]
     }

@@ -1,16 +1,15 @@
 use anyhow::Result;
+use book2pdf::{Config, Downloader, HandlersRegistry, PdfMerger};
 use clap::{Parser, Subcommand};
-use book2pdf::{Downloader, PdfMerger, Config, HandlersRegistry};
 use std::path::PathBuf;
 use std::process;
 use tracing::error;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 #[derive(Parser)]
 #[command(name = "book2pdf")]
 #[command(about = "CLI utility to turn published documentation into PDFs for offline reading")]
-#[command(version = "0.1.0")]
+#[command(version)]
 struct Args {
     /// Enable verbose output (debug level)
     #[arg(short = 'v', long = "verbose", global = true, conflicts_with_all = ["debug", "quiet"])]
@@ -64,6 +63,11 @@ enum Commands {
         #[arg(long = "show-browser")]
         show_browser: bool,
 
+        /// Launch Chrome with --no-sandbox (needed on Ubuntu 23.10+, Docker, and
+        /// many CI runners where user namespaces are disabled; trusted envs only)
+        #[arg(long = "no-sandbox")]
+        no_sandbox: bool,
+
         /// Simulate mode - execute everything but don't actually download or create files
         #[arg(long = "simulate", short = 's')]
         simulate: bool,
@@ -103,7 +107,6 @@ fn parse_pages(s: &str) -> Result<usize, String> {
     Ok(value)
 }
 
-
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
@@ -140,21 +143,32 @@ async fn main() {
         .add_directive("chromiumoxide::handler=off".parse().unwrap())
         .add_directive(format!("book2pdf={}", book2pdf_level).parse().unwrap())
         .add_directive(global_level.parse().unwrap());
-    
+
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(filter)
         .init();
 
     let result = match args.command {
-        Commands::Download { url, out_dir, no_combine, preserve_pages, timeout, pages, show_browser, simulate, list } => {
+        Commands::Download {
+            url,
+            out_dir,
+            no_combine,
+            preserve_pages,
+            timeout,
+            pages,
+            show_browser,
+            no_sandbox,
+            simulate,
+            list,
+        } => {
             // Handle --list flag first
             if list {
                 let registry = HandlersRegistry::default();
                 registry.list_supported_formats();
                 return;
             }
-            
+
             // URL is required for actual download
             let url = match url {
                 Some(u) => u,
@@ -163,33 +177,44 @@ async fn main() {
                     process::exit(1);
                 }
             };
-            
+
             // Use CLI args or fallback to config values
             let output_dir = out_dir.unwrap_or_else(|| config.output.folder.clone());
             let combine = !no_combine && config.output.combine_pdfs;
             let preserve = preserve_pages || config.output.preserve_pages;
             let timeout_val = timeout.unwrap_or(config.browser.timeout);
             let show_window = show_browser || config.browser.show_window;
-            
+            let no_sandbox = no_sandbox || config.browser.no_sandbox;
+
             // Debug logging to verify values
             tracing::debug!("Using output_dir: {}", output_dir);
             tracing::debug!("Using timeout: {}", timeout_val);
             tracing::debug!("Using combine: {}", combine);
             tracing::debug!("Using show_window: {}", show_window);
+            tracing::debug!("Using no_sandbox: {}", no_sandbox);
             tracing::debug!("Using simulate: {}", simulate);
-            
+
             let downloader = Downloader::new(output_dir, combine, preserve, timeout_val)
-                .with_pdf_config(&config.pdf);
+                .with_pdf_config(&config.pdf)
+                .with_no_sandbox(no_sandbox);
             let simulate_mode = simulate || config.scraping.simulate;
-            downloader.run(&url, pages.or(config.scraping.page_limit), show_window, simulate_mode).await
+            downloader
+                .run(
+                    &url,
+                    pages.or(config.scraping.page_limit),
+                    show_window,
+                    simulate_mode,
+                )
+                .await
         }
-        Commands::Merge { input_dir, output_file } => {
-            PdfMerger::merge_directory(&input_dir, &output_file).await
-        }
+        Commands::Merge {
+            input_dir,
+            output_file,
+        } => PdfMerger::merge_directory(&input_dir, &output_file).await,
     };
 
     if let Err(e) = result {
-        error!("{}", &format!("Error: {e}"));
+        error!("Error: {e}");
         process::exit(1);
     }
 }

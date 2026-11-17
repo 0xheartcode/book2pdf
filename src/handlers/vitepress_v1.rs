@@ -1,12 +1,12 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use chromiumoxide::Page;
 use scraper::{Html, Selector};
 use tracing::debug;
 use url::Url;
 
-use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
 use crate::handlers::utils;
+use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
 
 /// Handler for VitePress v1.x documentation sites
 pub struct VitePressV1Handler;
@@ -15,41 +15,39 @@ pub struct VitePressV1Handler;
 impl SiteDetector for VitePressV1Handler {
     async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
         let document = Html::parse_document(content);
-        
+
         // Check for VitePress indicators
-        let has_vitepress_comment = content.contains("VitePress") || 
-                                   content.contains("Powered by VitePress") ||
-                                   content.contains("vitepress");
-        
+        let has_vitepress_comment = content.contains("VitePress")
+            || content.contains("Powered by VitePress")
+            || content.contains("vitepress");
+
         if !has_vitepress_comment {
             return Ok(ConfidenceLevel::None);
         }
-        
+
         // Check for v1.x specific selectors
         let v1_selectors = [
-            ".sidebar",                           // Generic sidebar
-            ".nav-links",                         // Navigation links
-            ".sidebar-group",                     // Sidebar groups
-            "#content.content",                   // Content with ID and class
-            ".page-content",                      // Page content
-            ".theme-container",                   // Theme container
-            ".navbar",                            // Navigation bar
-            ".sidebar-links"                      // Sidebar links
+            ".sidebar",         // Generic sidebar
+            ".nav-links",       // Navigation links
+            ".sidebar-group",   // Sidebar groups
+            "#content.content", // Content with ID and class
+            ".page-content",    // Page content
+            ".theme-container", // Theme container
+            ".navbar",          // Navigation bar
+            ".sidebar-links",   // Sidebar links
         ];
-        
+
         // Check for ABSENCE of v2.x elements (negative detection)
-        let v2_selectors = [
-            ".VPContent",
-            "#VPContent", 
-            ".VPSidebar",
-            ".VPDoc"
-        ];
-        
+        let v2_selectors = [".VPContent", "#VPContent", ".VPSidebar", ".VPDoc"];
+
         let v1_matches = utils::count_matching_selectors(&document, &v1_selectors);
         let v2_matches = utils::count_matching_selectors(&document, &v2_selectors);
-        
-        debug!("Found {} VitePress v1.x selectors, {} v2.x selectors", v1_matches, v2_matches);
-        
+
+        debug!(
+            "Found {} VitePress v1.x selectors, {} v2.x selectors",
+            v1_matches, v2_matches
+        );
+
         // High confidence if we have v1.x elements AND no v2.x elements
         if v2_matches == 0 && v1_matches >= 3 {
             Ok(ConfidenceLevel::Certain)
@@ -61,11 +59,11 @@ impl SiteDetector for VitePressV1Handler {
             Ok(ConfidenceLevel::None)
         }
     }
-    
+
     fn version(&self) -> &str {
         "v1.x"
     }
-    
+
     fn format_name(&self) -> &str {
         "vitepress-v1.x"
     }
@@ -75,8 +73,9 @@ impl SiteDetector for VitePressV1Handler {
 impl FormatHandler for VitePressV1Handler {
     async fn expand_navigation(&self, page: &Page) -> Result<()> {
         debug!("Expanding VitePress v1.x navigation...");
-        
-        page.evaluate(r#"
+
+        page.evaluate(
+            r#"
             (() => {
                 // Expand VitePress v1.x navigation groups
                 const toggles = document.querySelectorAll([
@@ -108,69 +107,77 @@ impl FormatHandler for VitePressV1Handler {
                 
                 console.log('VitePress v1.x navigation expanded');
             })()
-        "#).await.map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
-        
+        "#,
+        )
+        .await
+        .map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
+
         Ok(())
     }
-    
+
     async fn extract_links(&self, page: &Page, base_url: &Url) -> Result<Vec<String>> {
         debug!("Extracting links from VitePress v1.x...");
-        
+
         let content = page
             .content()
             .await
             .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
+
         let document = Html::parse_document(&content);
-        
+
         // VitePress v1.x specific navigation selectors
         let link_selectors = [
-            ".sidebar a",                         // Primary sidebar
-            ".nav-links a",                       // Navigation links
-            ".sidebar-group a",                   // Sidebar groups
-            ".sidebar-links a",                   // Sidebar links
-            ".nav a",                             // Generic navigation
-            ".theme-container nav a",             // Theme container nav
-            "[class*='sidebar'] a",               // Flexible sidebar selector
-            "aside a"                             // Aside links
+            ".sidebar a",             // Primary sidebar
+            ".nav-links a",           // Navigation links
+            ".sidebar-group a",       // Sidebar groups
+            ".sidebar-links a",       // Sidebar links
+            ".nav a",                 // Generic navigation
+            ".theme-container nav a", // Theme container nav
+            "[class*='sidebar'] a",   // Flexible sidebar selector
+            "aside a",                // Aside links
         ];
-        
+
         let mut links = Vec::new();
-        
+
         for selector_str in &link_selectors {
             if let Ok(selector) = Selector::parse(selector_str) {
                 for element in document.select(&selector) {
-                    if let Some(href) = element.value().attr("href") {
-                        if let Ok(absolute_url) = base_url.join(href) {
-                            let url_str = absolute_url.to_string();
-                            
-                            // Filter out non-content links
-                            if !url_str.contains("#") &&
-                               !url_str.contains("mailto:") &&
-                               !url_str.contains("javascript:") &&
-                               !url_str.contains("tel:") &&
-                               !url_str.contains("?") &&
-                               !links.contains(&url_str) {
-                                links.push(url_str);
-                            }
+                    if let Some(href) = element.value().attr("href")
+                        && let Ok(absolute_url) = base_url.join(href)
+                    {
+                        let url_str = absolute_url.to_string();
+
+                        // Filter out non-content links
+                        if !url_str.contains("#")
+                            && !url_str.contains("mailto:")
+                            && !url_str.contains("javascript:")
+                            && !url_str.contains("tel:")
+                            && !url_str.contains("?")
+                            && !links.contains(&url_str)
+                        {
+                            links.push(url_str);
                         }
                     }
                 }
-                
+
                 if !links.is_empty() {
-                    debug!("Found {} links using VitePress v1.x selector: {}", links.len(), selector_str);
+                    debug!(
+                        "Found {} links using VitePress v1.x selector: {}",
+                        links.len(),
+                        selector_str
+                    );
                     break;
                 }
             }
         }
-        
+
         debug!("Extracted {} links from VitePress v1.x", links.len());
         Ok(links)
     }
-    
+
     async fn prepare_page(&self, page: &Page) -> Result<()> {
         debug!("Preparing VitePress v1.x page for PDF...");
-        
+
         page.evaluate(r#"
             (() => {
                 const style = document.createElement('style');
@@ -285,12 +292,14 @@ impl FormatHandler for VitePressV1Handler {
                 console.log('VitePress v1.x page prepared for PDF');
             })()
         "#).await.map_err(|e| anyhow!("Failed to prepare page: {e}"))?;
-        
+
         Ok(())
     }
-    
+
     async fn detect_version(&self, page: &Page) -> Result<Option<String>> {
-        let version_result = page.evaluate(r#"
+        let version_result = page
+            .evaluate(
+                r#"
             (() => {
                 // Check generator meta tag
                 const meta = document.querySelector('meta[name="generator"]');
@@ -328,23 +337,25 @@ impl FormatHandler for VitePressV1Handler {
                 
                 return null;
             })()
-        "#).await;
-        
-        if let Ok(result) = version_result {
-            if let Ok(version) = result.into_value::<String>() {
-                if !version.is_empty() && version != "null" {
-                    return Ok(Some(version));
-                }
-            }
+        "#,
+            )
+            .await;
+
+        if let Ok(result) = version_result
+            && let Ok(version) = result.into_value::<String>()
+            && !version.is_empty()
+            && version != "null"
+        {
+            return Ok(Some(version));
         }
-        
+
         Ok(None)
     }
-    
+
     fn name(&self) -> &str {
         "VitePress Handler (v1.x)"
     }
-    
+
     fn supported_versions(&self) -> Vec<&str> {
         vec!["v1.x"]
     }

@@ -18,6 +18,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct OutputConfig {
     pub folder: String,
     pub filename: Option<String>,
@@ -26,14 +27,17 @@ pub struct OutputConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct BrowserConfig {
     pub show_window: bool,
     pub timeout: f64,
     pub window_width: u32,
     pub window_height: u32,
+    pub no_sandbox: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct PdfConfig {
     pub scale: f64,
     pub margin_top: f64,
@@ -43,6 +47,7 @@ pub struct PdfConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct ScrapingConfig {
     pub page_limit: Option<usize>,
     pub supported_sites: Vec<String>,
@@ -50,11 +55,11 @@ pub struct ScrapingConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct LoggingConfig {
     pub level: String,
     pub suppress_browser_logs: bool,
 }
-
 
 impl Default for OutputConfig {
     fn default() -> Self {
@@ -74,6 +79,7 @@ impl Default for BrowserConfig {
             timeout: 30.0,
             window_width: 1920,
             window_height: 1080,
+            no_sandbox: false,
         }
     }
 }

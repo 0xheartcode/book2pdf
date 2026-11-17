@@ -12,6 +12,7 @@ show_window = false                 # Default: run headless
 timeout = 30.0                      # Default: 30 second timeout
 window_width = 1920                 # Default: 1920px browser width
 window_height = 1080                # Default: 1080px browser height
+no_sandbox = false                  # Default: false. Set true on Ubuntu 23.10+, Docker, or CI (trusted envs only)
 
 [pdf]
 scale = 0.75                        # Default: 75% scale factor
