@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use chromiumoxide::Page;
 use scraper::{Html, Selector};
@@ -6,8 +6,8 @@ use std::collections::HashSet;
 use tracing::debug;
 use url::Url;
 
-use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
 use crate::handlers::utils;
+use crate::handlers::{ConfidenceLevel, FormatHandler, SiteDetector};
 
 /// Handler for Sphinx documentation sites (including Jupyter Book, ReadTheDocs themes, etc.)
 pub struct SphinxHandler;
@@ -17,25 +17,27 @@ impl SiteDetector for SphinxHandler {
     fn version(&self) -> &str {
         "v5.x-8.x"
     }
-    
+
     fn format_name(&self) -> &str {
         "sphinx"
     }
-    
+
+    // Distinct detection signals can intentionally map to the same confidence level.
+    #[allow(clippy::if_same_then_else)]
     async fn can_handle(&self, _url: &str, content: &str) -> Result<ConfidenceLevel> {
         let document = Html::parse_document(content);
-        
+
         // Primary Sphinx detection patterns
         let has_sphinx_meta = utils::has_meta_generator(&document, "sphinx");
-        
+
         // Check for Sphinx-specific text patterns
         let sphinx_footer_patterns = [
             ("Built with", "Sphinx"),
-            ("Made with", "Sphinx"), 
+            ("Made with", "Sphinx"),
             ("Created using Sphinx", ""),
-            ("sphinx-doc.org", "")
+            ("sphinx-doc.org", ""),
         ];
-        
+
         let has_sphinx_footer = sphinx_footer_patterns.iter().any(|(pattern1, pattern2)| {
             if pattern2.is_empty() {
                 content.contains(pattern1)
@@ -43,73 +45,71 @@ impl SiteDetector for SphinxHandler {
                 utils::contains_all_keywords(content, &[pattern1, pattern2])
             }
         });
-        
+
         // Check for common Sphinx themes and patterns
         let sphinx_indicators = [
             // Theme-specific indicators
-            "sphinx_rtd_theme",           // ReadTheDocs theme
-            "furo",                       // Furo theme  
-            "pydata-sphinx-theme",        // PyData theme
-            "book-theme",                 // Jupyter Book theme
-            
+            "sphinx_rtd_theme",    // ReadTheDocs theme
+            "furo",                // Furo theme
+            "pydata-sphinx-theme", // PyData theme
+            "book-theme",          // Jupyter Book theme
             // Sphinx-generated content patterns
-            "_static/",                   // Static assets directory
-            "_sources/",                  // Source files directory
-            "genindex.html",             // Generated index
-            "search.html",               // Search functionality
-            "py-modindex.html",          // Python module index
-            
+            "_static/",         // Static assets directory
+            "_sources/",        // Source files directory
+            "genindex.html",    // Generated index
+            "search.html",      // Search functionality
+            "py-modindex.html", // Python module index
             // CSS/JS patterns
-            "searchtools.js",            // Sphinx search
-            "doctools.js",               // Sphinx doc tools
-            "_static/js/theme.js",       // Theme JavaScript
-            "sphinx-design",             // Sphinx design extension
-            
+            "searchtools.js",      // Sphinx search
+            "doctools.js",         // Sphinx doc tools
+            "_static/js/theme.js", // Theme JavaScript
+            "sphinx-design",       // Sphinx design extension
             // Navigation patterns
-            "toctree",                   // Table of contents tree
-            "sphinxsidebar",             // Sphinx sidebar
-            "document",                  // Sphinx document wrapper
-            "bodywrapper"                // Sphinx body wrapper
+            "toctree",       // Table of contents tree
+            "sphinxsidebar", // Sphinx sidebar
+            "document",      // Sphinx document wrapper
+            "bodywrapper",   // Sphinx body wrapper
         ];
-        
+
         let sphinx_matches = utils::count_text_indicators(content, &sphinx_indicators);
         debug!("Found {} Sphinx text indicators", sphinx_matches);
-        
+
         // Check for Sphinx-specific CSS classes and IDs
         let sphinx_selectors = [
-            ".sphinxsidebar",            // Classic Sphinx sidebar
-            ".document",                 // Document wrapper
-            ".bodywrapper",              // Body wrapper
-            ".toctree-wrapper",          // Table of contents
-            ".rst-content",              // reStructuredText content (RTD theme)
-            ".wy-nav-content",           // ReadTheDocs navigation
-            ".bd-main",                  // PyData theme main content
-            ".bd-sidebar",               // PyData theme sidebar
-            "#searchbox",                // Search box
-            ".genindex-jumpbox",         // Generated index jump box
-            "[class*='sphinx']",         // Any class containing 'sphinx'
-            ".version-dropdown",         // Version selector
-            ".ethical-ad"                // ReadTheDocs ethical ads
+            ".sphinxsidebar",    // Classic Sphinx sidebar
+            ".document",         // Document wrapper
+            ".bodywrapper",      // Body wrapper
+            ".toctree-wrapper",  // Table of contents
+            ".rst-content",      // reStructuredText content (RTD theme)
+            ".wy-nav-content",   // ReadTheDocs navigation
+            ".bd-main",          // PyData theme main content
+            ".bd-sidebar",       // PyData theme sidebar
+            "#searchbox",        // Search box
+            ".genindex-jumpbox", // Generated index jump box
+            "[class*='sphinx']", // Any class containing 'sphinx'
+            ".version-dropdown", // Version selector
+            ".ethical-ad",       // ReadTheDocs ethical ads
         ];
-        
-        let css_matches = sphinx_selectors.iter()
+
+        let css_matches = sphinx_selectors
+            .iter()
             .filter(|&selector_str| utils::has_css_selector(&document, selector_str))
             .count();
         debug!("Found {} Sphinx CSS selectors", css_matches);
-        
+
         // Check for Jupyter Book specific patterns
         let jupyter_book_keywords = ["thebe", "jupyter-book", "executable-book"];
         let is_jupyter_book = utils::contains_any_keywords(content, &jupyter_book_keywords);
-        
+
         // Check for ReadTheDocs hosting
         let readthedocs_keywords = ["readthedocs.io", "Read the Docs", "rtd-footer-container"];
         let is_readthedocs = utils::contains_any_keywords(content, &readthedocs_keywords);
-        
+
         // Confidence logic
         if has_sphinx_meta && (sphinx_matches >= 3 || css_matches >= 2) {
             Ok(ConfidenceLevel::Certain)
         } else if has_sphinx_footer && (sphinx_matches >= 2 || css_matches >= 2) {
-            Ok(ConfidenceLevel::High)  
+            Ok(ConfidenceLevel::High)
         } else if (sphinx_matches >= 4 || css_matches >= 3) && (is_readthedocs || is_jupyter_book) {
             Ok(ConfidenceLevel::High)
         } else if sphinx_matches >= 3 || css_matches >= 2 {
@@ -127,7 +127,7 @@ impl FormatHandler for SphinxHandler {
     fn name(&self) -> &str {
         "Sphinx"
     }
-    
+
     fn supported_versions(&self) -> Vec<&str> {
         vec!["v5.x", "v6.x", "v7.x", "v8.x"]
     }
@@ -137,47 +137,47 @@ impl FormatHandler for SphinxHandler {
             .content()
             .await
             .map_err(|e| anyhow!("Failed to get page content: {e}"))?;
-        
+
         // Try to extract Sphinx version from meta generator tag
         let document = Html::parse_document(&content);
-        
-        if let Ok(selector) = Selector::parse(r#"meta[name="generator"]"#) {
-            if let Some(meta) = document.select(&selector).next() {
-                if let Some(generator_content) = meta.value().attr("content") {
-                    if generator_content.to_lowercase().contains("sphinx") {
-                        // Try to extract version (e.g., "Sphinx 4.5.0")
-                        if let Some(version_start) = generator_content.find(char::is_numeric) {
-                            if let Some(version_part) = generator_content.get(version_start..) {
-                                if let Some(space_pos) = version_part.find(' ') {
-                                    return Ok(Some(format!("v{}", &version_part[..space_pos])));
-                                } else if let Some(end_pos) = version_part.find(|c: char| !c.is_ascii_alphanumeric() && c != '.') {
-                                    return Ok(Some(format!("v{}", &version_part[..end_pos])));
-                                }
-                            }
-                        }
-                        return Ok(Some("Sphinx".to_string()));
-                    }
+
+        if let Ok(selector) = Selector::parse(r#"meta[name="generator"]"#)
+            && let Some(meta) = document.select(&selector).next()
+            && let Some(generator_content) = meta.value().attr("content")
+            && generator_content.to_lowercase().contains("sphinx")
+        {
+            // Try to extract version (e.g., "Sphinx 4.5.0")
+            if let Some(version_start) = generator_content.find(char::is_numeric)
+                && let Some(version_part) = generator_content.get(version_start..)
+            {
+                if let Some(space_pos) = version_part.find(' ') {
+                    return Ok(Some(format!("v{}", &version_part[..space_pos])));
+                } else if let Some(end_pos) =
+                    version_part.find(|c: char| !c.is_ascii_alphanumeric() && c != '.')
+                {
+                    return Ok(Some(format!("v{}", &version_part[..end_pos])));
                 }
             }
+            return Ok(Some("Sphinx".to_string()));
         }
-        
+
         // Check for theme-specific version info
         if content.contains("jupyter-book") || content.contains("thebe") {
             return Ok(Some("Jupyter Book".to_string()));
         }
-        
+
         if content.contains("sphinx_rtd_theme") {
             return Ok(Some("Sphinx (ReadTheDocs theme)".to_string()));
         }
-        
+
         if content.contains("furo") {
             return Ok(Some("Sphinx (Furo theme)".to_string()));
         }
-        
+
         if content.contains("pydata-sphinx-theme") {
             return Ok(Some("Sphinx (PyData theme)".to_string()));
         }
-        
+
         // Fallback
         if content.contains("sphinx") || content.contains("Sphinx") {
             Ok(Some("Sphinx (unknown version)".to_string()))
@@ -188,7 +188,8 @@ impl FormatHandler for SphinxHandler {
 
     async fn expand_navigation(&self, page: &Page) -> Result<()> {
         // Expand Sphinx navigation - different strategies for different themes
-        page.evaluate(r#"
+        page.evaluate(
+            r#"
             // Expand ReadTheDocs theme navigation
             document.querySelectorAll('.wy-menu-vertical .toctree-l1 > a').forEach(link => {
                 try {
@@ -231,7 +232,10 @@ impl FormatHandler for SphinxHandler {
             
             // Wait for any navigation animations
             new Promise(resolve => setTimeout(resolve, 1000));
-        "#).await.map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
+        "#,
+        )
+        .await
+        .map_err(|e| anyhow!("Failed to expand navigation: {e}"))?;
 
         Ok(())
     }
@@ -251,36 +255,30 @@ impl FormatHandler for SphinxHandler {
             // ReadTheDocs theme
             ".wy-menu-vertical a[href]",
             ".wy-nav-content-wrap .toctree-wrapper a[href]",
-            
             // Classic Sphinx theme
             ".sphinxsidebar .toctree-wrapper a[href]",
             ".toctree-l1 a[href]",
             ".toctree-l2 a[href]",
             ".toctree-l3 a[href]",
-            
             // Furo theme
             ".sidebar-tree a[href]",
             ".toc-tree a[href]",
-            
             // PyData theme
             ".bd-toc a[href]",
             ".navbar-nav a[href]",
-            
             // Jupyter Book theme
             ".bd-toc a[href]",
             ".toc a[href]",
-            
             // Generic navigation patterns
             "nav a[href]",
             ".navigation a[href]",
             ".sidebar a[href]",
             ".toctree a[href]",
             ".contents a[href]",
-            
             // Fallback to any documentation links
             "main a[href]",
             ".document a[href]",
-            ".rst-content a[href]"
+            ".rst-content a[href]",
         ];
 
         for selector_str in &nav_selectors {
@@ -295,7 +293,7 @@ impl FormatHandler for SphinxHandler {
                     }
                 }
             }
-            
+
             // Stop if we found enough links from navigation
             if links.len() >= 50 {
                 break;
@@ -402,23 +400,26 @@ impl SphinxHandler {
         if href.starts_with("http") && !href.contains("readthedocs.io") {
             return false;
         }
-        
+
         // Exclude anchors, static files, and special pages
-        if href.contains('#') ||
-           href.contains("/_static/") ||
-           href.contains("/_sources/") ||
-           href.ends_with(".pdf") ||
-           href.ends_with(".zip") ||
-           href.ends_with(".tar.gz") ||
-           href.contains("/search.html") ||
-           href.contains("/genindex.html") ||
-           href.contains("/py-modindex.html") ||
-           href == "/" ||
-           href.is_empty() {
+        if href.contains('#')
+            || href.contains("/_static/")
+            || href.contains("/_sources/")
+            || href.ends_with(".pdf")
+            || href.ends_with(".zip")
+            || href.ends_with(".tar.gz")
+            || href.contains("/search.html")
+            || href.contains("/genindex.html")
+            || href.contains("/py-modindex.html")
+            || href == "/"
+            || href.is_empty()
+        {
             return false;
         }
-        
+
         // Include relative documentation links
-        href.starts_with('/') || href.ends_with(".html") || (!href.contains('.') && !href.contains("://"))
+        href.starts_with('/')
+            || href.ends_with(".html")
+            || (!href.contains('.') && !href.contains("://"))
     }
 }

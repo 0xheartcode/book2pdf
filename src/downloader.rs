@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use chromiumoxide::cdp::browser_protocol::page::PrintToPdfParams;
 use chromiumoxide::{Browser, BrowserConfig};
 use futures_util::StreamExt;
@@ -9,8 +9,7 @@ use tokio::fs;
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-use crate::{PdfMerger, config::PdfConfig, HandlersRegistry};
-
+use crate::{HandlersRegistry, PdfMerger, config::PdfConfig};
 
 #[derive(Debug, Clone)]
 pub struct PdfOptions {
@@ -40,6 +39,7 @@ pub struct Downloader {
     _timeout: Duration,
     pdf_options: PdfOptions,
     handlers_registry: HandlersRegistry,
+    no_sandbox: bool,
 }
 
 impl Downloader {
@@ -51,7 +51,18 @@ impl Downloader {
             _timeout: Duration::from_secs_f64(timeout_seconds),
             pdf_options: PdfOptions::default(),
             handlers_registry: HandlersRegistry::default(),
+            no_sandbox: false,
         }
+    }
+
+    /// Launch Chrome/Chromium with `--no-sandbox`.
+    ///
+    /// Needed on hosts where unprivileged user namespaces are disabled
+    /// (Ubuntu 23.10+, many Docker images, CI runners). Only enable this in a
+    /// trusted environment.
+    pub fn with_no_sandbox(mut self, no_sandbox: bool) -> Self {
+        self.no_sandbox = no_sandbox;
+        self
     }
 
     pub fn with_pdf_config(mut self, pdf_config: &PdfConfig) -> Self {
@@ -65,7 +76,13 @@ impl Downloader {
         self
     }
 
-    pub async fn run(&self, target_url: &str, pages_limit: Option<usize>, show_browser: bool, simulate: bool) -> Result<()> {
+    pub async fn run(
+        &self,
+        target_url: &str,
+        pages_limit: Option<usize>,
+        show_browser: bool,
+        simulate: bool,
+    ) -> Result<()> {
         if simulate {
             info!("🔍 [SIMULATE] Would visit: \"{}\"", target_url);
         } else {
@@ -73,13 +90,17 @@ impl Downloader {
         }
 
         let mut config_builder = BrowserConfig::builder();
-        
+
         if show_browser {
             config_builder = config_builder.with_head();
         }
-        
+
+        if self.no_sandbox {
+            config_builder = config_builder.arg("--no-sandbox");
+        }
+
         let config = config_builder
-            .window_size(1920, 1080)  // Larger viewport for better rendering
+            .window_size(1920, 1080) // Larger viewport for better rendering
             .build()
             .map_err(|e| anyhow!("Failed to create browser config: {e}"))?;
 
@@ -92,8 +113,9 @@ impl Downloader {
                 if let Err(err) = h {
                     // Only log if it's not a common websocket deserialization error
                     let err_str = err.to_string();
-                    if !err_str.contains("data did not match any variant") && 
-                       !err_str.contains("untagged enum Message") {
+                    if !err_str.contains("data did not match any variant")
+                        && !err_str.contains("untagged enum Message")
+                    {
                         error!("Browser handler error: {}", err);
                     } else {
                         debug!("Chrome protocol message ignored: {}", err);
@@ -102,13 +124,15 @@ impl Downloader {
             }
         });
 
-        let result = self.run_internal(&browser, target_url, pages_limit, show_browser, simulate).await;
+        let result = self
+            .run_internal(&browser, target_url, pages_limit, show_browser, simulate)
+            .await;
 
         // Explicitly close browser to avoid warning
         if let Err(e) = browser.close().await {
             debug!("Browser close error (non-critical): {}", e);
         }
-        
+
         // Give browser more time to close gracefully and wait for handler to finish
         tokio::time::sleep(Duration::from_millis(500)).await;
         handle.abort();
@@ -117,7 +141,14 @@ impl Downloader {
         result
     }
 
-    async fn run_internal(&self, browser: &Browser, target_url: &str, pages_limit: Option<usize>, _show_browser: bool, simulate: bool) -> Result<()> {
+    async fn run_internal(
+        &self,
+        browser: &Browser,
+        target_url: &str,
+        pages_limit: Option<usize>,
+        _show_browser: bool,
+        simulate: bool,
+    ) -> Result<()> {
         let page = browser
             .new_page("about:blank")
             .await
@@ -135,9 +166,12 @@ impl Downloader {
         tokio::time::sleep(Duration::from_millis(3000)).await;
 
         // Navigate to a documentation page first to ensure sidebar is loaded
-        if target_url.ends_with('/') || target_url.ends_with(".com") || target_url.ends_with(".app") {
+        if target_url.ends_with('/') || target_url.ends_with(".com") || target_url.ends_with(".app")
+        {
             // Try to find the first documentation link
-            let first_doc_link = page.evaluate(r#"
+            let first_doc_link = page
+                .evaluate(
+                    r#"
                 const links = document.querySelectorAll('a[href^="/"]');
                 for (let link of links) {
                     const href = link.getAttribute('href');
@@ -146,30 +180,42 @@ impl Downloader {
                     }
                 }
                 return null;
-            "#).await.ok();
+            "#,
+                )
+                .await
+                .ok();
 
-            if let Some(result) = first_doc_link {
-                if let Ok(doc_link) = result.into_value::<String>() {
-                    info!("Navigating to documentation page to load sidebar: {}", &doc_link);
-                    page.goto(&doc_link)
-                        .await
-                        .map_err(|e| anyhow!("Failed to navigate to doc page: {e}"))?;
-                    tokio::time::sleep(Duration::from_millis(2000)).await;
-                }
+            if let Some(result) = first_doc_link
+                && let Ok(doc_link) = result.into_value::<String>()
+            {
+                info!(
+                    "Navigating to documentation page to load sidebar: {}",
+                    &doc_link
+                );
+                page.goto(&doc_link)
+                    .await
+                    .map_err(|e| anyhow!("Failed to navigate to doc page: {e}"))?;
+                tokio::time::sleep(Duration::from_millis(2000)).await;
             }
         }
 
         // Detect the appropriate format handler
-        let handler = self.handlers_registry.detect_format(target_url, &page).await?
+        let handler = self
+            .handlers_registry
+            .detect_format(target_url, &page)
+            .await?
             .ok_or_else(|| anyhow!("No suitable format handler found for this site"))?;
 
         info!("Detected format: {}", handler.name());
-        
+
         // Detect version (lightweight)
-        if let Ok(Some(version)) = handler.detect_version(&page).await {
-            info!("Version: {}", &version);
-        } else {
-            info!("Version: {}", "Unknown");
+        match handler.detect_version(&page).await {
+            Ok(Some(version)) => {
+                info!("Version: {}", &version);
+            }
+            _ => {
+                info!("Version: {}", "Unknown");
+            }
         }
 
         // Use the handler to expand navigation and extract links
@@ -182,17 +228,20 @@ impl Downloader {
         debug!("Links collected: {:?}", links);
 
         // Apply page limit if specified
-        if let Some(limit) = pages_limit {
-            if links.len() > limit {
-                info!("Limited to {} pages (found {} total)", limit, links.len());
-                links.truncate(limit);
-            }
+        if let Some(limit) = pages_limit
+            && links.len() > limit
+        {
+            info!("Limited to {} pages (found {} total)", limit, links.len());
+            links.truncate(limit);
         }
 
         // Create output directory structure
         let pages_dir = PathBuf::from(&self.out_dir).join("pages");
         if simulate {
-            info!("🔍 [SIMULATE] Would create directory: {}", pages_dir.display());
+            info!(
+                "🔍 [SIMULATE] Would create directory: {}",
+                pages_dir.display()
+            );
         } else {
             fs::create_dir_all(&pages_dir)
                 .await
@@ -203,14 +252,21 @@ impl Downloader {
 
         // Create cover page with logo first
         if simulate {
-            let cover_path = PathBuf::from(&self.out_dir).join("pages").join("01_cover.pdf");
-            info!("🔍 [SIMULATE] Would create cover page: {}", cover_path.display());
+            let cover_path = PathBuf::from(&self.out_dir)
+                .join("pages")
+                .join("01_cover.pdf");
+            info!(
+                "🔍 [SIMULATE] Would create cover page: {}",
+                cover_path.display()
+            );
             pdf_paths.push(cover_path);
-        } else if let Ok(cover_path) = self.create_cover_page(browser, target_url).await {
-            pdf_paths.push(cover_path);
+        } else {
+            if let Ok(cover_path) = self.create_cover_page(browser, target_url).await {
+                pdf_paths.push(cover_path);
+            }
         }
 
-        // Use links in the order they were collected (navigation order) 
+        // Use links in the order they were collected (navigation order)
         // Start index from 2 since cover page takes index 1
         for (index, href) in links.iter().enumerate() {
             if simulate {
@@ -218,28 +274,46 @@ impl Downloader {
                 if !slug.is_empty() {
                     let filename = format!("{:02}_{}.pdf", index + 2, slug);
                     let out_path = PathBuf::from(&self.out_dir).join("pages").join(filename);
-                    info!("🔍 [SIMULATE] Would download: {} -> {}", href, out_path.display());
+                    info!(
+                        "🔍 [SIMULATE] Would download: {} -> {}",
+                        href,
+                        out_path.display()
+                    );
                     pdf_paths.push(out_path);
                 }
-            } else if let Ok(path) = self.download_link(browser, target_url, href, index + 2, handler).await {
-                pdf_paths.push(path);
+            } else {
+                if let Ok(path) = self
+                    .download_link(browser, target_url, href, index + 2, handler)
+                    .await
+                {
+                    pdf_paths.push(path);
+                }
             }
         }
 
         if self.combine && !pdf_paths.is_empty() {
             if simulate {
                 let url = Url::parse(target_url)?;
-                let domain_slug = slug::slugify(url.host_str().unwrap_or("gitbook").replace('.', "-"));
-                let combined_path = PathBuf::from(&self.out_dir).join(format!("{domain_slug}-combined.pdf"));
-                info!("🔍 [SIMULATE] Would combine {} PDFs into: {}", pdf_paths.len(), combined_path.display());
+                let domain_slug =
+                    slug::slugify(url.host_str().unwrap_or("gitbook").replace('.', "-"));
+                let combined_path =
+                    PathBuf::from(&self.out_dir).join(format!("{domain_slug}-combined.pdf"));
+                info!(
+                    "🔍 [SIMULATE] Would combine {} PDFs into: {}",
+                    pdf_paths.len(),
+                    combined_path.display()
+                );
             } else {
                 let _combined_path = self.combine_all_pdfs(target_url, &pdf_paths).await?;
             }
-            
+
             // Delete individual pages unless preserve_pages is set
             if !self.preserve_pages {
                 if simulate {
-                    info!("🔍 [SIMULATE] Would clean up {} individual page files", pdf_paths.len());
+                    info!(
+                        "🔍 [SIMULATE] Would clean up {} individual page files",
+                        pdf_paths.len()
+                    );
                 } else {
                     info!("Cleaning up individual page files...");
                     for pdf_path in &pdf_paths {
@@ -247,12 +321,12 @@ impl Downloader {
                             warn!("Failed to remove {}: {}", pdf_path.display(), e);
                         }
                     }
-                    
+
                     // Remove pages directory if empty
-                    if let Ok(mut entries) = fs::read_dir(&pages_dir).await {
-                        if entries.next_entry().await?.is_none() {
-                            let _ = fs::remove_dir(&pages_dir).await;
-                        }
+                    if let Ok(mut entries) = fs::read_dir(&pages_dir).await
+                        && entries.next_entry().await?.is_none()
+                    {
+                        let _ = fs::remove_dir(&pages_dir).await;
                     }
                 }
             }
@@ -281,7 +355,9 @@ impl Downloader {
         tokio::time::sleep(Duration::from_millis(2000)).await;
 
         // Extract site title and logo
-        let site_info = page.evaluate(r#"
+        let site_info = page
+            .evaluate(
+                r#"
             (() => {
                 // Try to find logo
                 const logoSelectors = [
@@ -315,9 +391,13 @@ impl Downloader {
                     url: window.location.href
                 };
             })()
-        "#).await.map_err(|e| anyhow!("Failed to extract site info: {e}"))?;
+        "#,
+            )
+            .await
+            .map_err(|e| anyhow!("Failed to extract site info: {e}"))?;
 
-        let site_data: serde_json::Value = site_info.into_value()
+        let site_data: serde_json::Value = site_info
+            .into_value()
             .map_err(|e| anyhow!("Failed to parse site info: {e}"))?;
 
         let title = site_data["title"].as_str().unwrap_or("Documentation");
@@ -326,12 +406,15 @@ impl Downloader {
 
         // Create HTML cover page
         let logo_html = if let Some(logo) = logo_url {
-            format!(r#"<img src="{logo}" alt="Logo" style="max-width: 300px; max-height: 200px; margin-bottom: 30px;">"#)
+            format!(
+                r#"<img src="{logo}" alt="Logo" style="max-width: 300px; max-height: 200px; margin-bottom: 30px;">"#
+            )
         } else {
             String::new()
         };
 
-        let cover_html = format!(r#"
+        let cover_html = format!(
+            r#"
             <!DOCTYPE html>
             <html>
             <head>
@@ -397,17 +480,21 @@ impl Downloader {
                 <div class="generated">Generated with book2pdf</div>
             </body>
             </html>
-        "#);
+        "#
+        );
 
         // Set the HTML content
-        page.set_content(&cover_html).await
+        page.set_content(&cover_html)
+            .await
             .map_err(|e| anyhow!("Failed to set cover page content: {e}"))?;
 
         tokio::time::sleep(Duration::from_millis(1000)).await;
 
         // Generate PDF
         let cover_filename = "01_cover.pdf";
-        let cover_path = PathBuf::from(&self.out_dir).join("pages").join(cover_filename);
+        let cover_path = PathBuf::from(&self.out_dir)
+            .join("pages")
+            .join(cover_filename);
 
         if let Some(parent) = cover_path.parent() {
             fs::create_dir_all(parent)
@@ -434,17 +521,23 @@ impl Downloader {
             .map_err(|e| anyhow!("Failed to write cover PDF: {e}"))?;
 
         info!("Cover page created: {}", &cover_path.display().to_string());
-        
+
         // Close the page to free memory
         if let Err(e) = page.close().await {
             debug!("Failed to close cover page (non-critical): {}", e);
         }
-        
+
         Ok(cover_path)
     }
 
-
-    async fn download_link(&self, browser: &Browser, target_url: &str, href: &str, index: usize, handler: &dyn crate::FormatHandler) -> Result<PathBuf> {
+    async fn download_link(
+        &self,
+        browser: &Browser,
+        target_url: &str,
+        href: &str,
+        index: usize,
+        handler: &dyn crate::FormatHandler,
+    ) -> Result<PathBuf> {
         let slug = self.href_to_slug(href);
 
         if slug.is_empty() {
@@ -459,15 +552,24 @@ impl Downloader {
             .join(href)
             .map_err(|e| anyhow!("Failed to join URL: {e}"))?;
 
-        self.download_page(browser, &url, &out_path, handler).await?;
+        self.download_page(browser, &url, &out_path, handler)
+            .await?;
 
         Ok(out_path)
     }
 
-    async fn download_page(&self, browser: &Browser, url: &Url, path: &Path, handler: &dyn crate::FormatHandler) -> Result<()> {
-        info!("Downloading \"{}\" into \"{}\"", 
-              &url.to_string(), 
-              &path.display().to_string());
+    async fn download_page(
+        &self,
+        browser: &Browser,
+        url: &Url,
+        path: &Path,
+        handler: &dyn crate::FormatHandler,
+    ) -> Result<()> {
+        info!(
+            "Downloading \"{}\" into \"{}\"",
+            &url.to_string(),
+            &path.display().to_string()
+        );
 
         let page = browser
             .new_page("about:blank")
@@ -516,7 +618,6 @@ impl Downloader {
         Ok(())
     }
 
-
     fn href_to_slug(&self, href: &str) -> String {
         let mut slug = slugify(href);
         slug = slug.replace("/", "-").trim().to_string();
@@ -533,10 +634,11 @@ impl Downloader {
 
         let url = Url::parse(target_url)?;
         let domain_slug = slugify(url.host_str().unwrap_or("gitbook").replace('.', "-"));
-        let combined_path = PathBuf::from(&self.out_dir).join(format!("{domain_slug}-combined.pdf"));
+        let combined_path =
+            PathBuf::from(&self.out_dir).join(format!("{domain_slug}-combined.pdf"));
 
         let mut merger = PdfMerger::new();
-        
+
         // Use the paths in the order they were discovered/downloaded
         for pdf_path in pdf_paths {
             if let Err(e) = merger.add_pdf(pdf_path).await {
@@ -546,7 +648,10 @@ impl Downloader {
 
         merger.save(&combined_path).await?;
 
-        info!("Combined PDF saved to: {}", &combined_path.display().to_string());
+        info!(
+            "Combined PDF saved to: {}",
+            &combined_path.display().to_string()
+        );
 
         Ok(combined_path)
     }
