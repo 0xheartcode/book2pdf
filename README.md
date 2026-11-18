@@ -261,12 +261,6 @@ book2pdf fails with `Failed to launch browser`. Workarounds:
   book2pdf download https://docs.example.com --no-sandbox
   ```
 
-- Or run on a host/profile where user namespaces are enabled.
-
-```
-
-
-
 ```
 :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
